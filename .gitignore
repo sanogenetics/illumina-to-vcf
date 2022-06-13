@@ -1,0 +1,3 @@
+in/
+venv/
+*.vcf.gz.*
