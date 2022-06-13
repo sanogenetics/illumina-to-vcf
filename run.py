@@ -43,8 +43,8 @@ from puretabix.vcf import LINE_START, VCFAccumulator, VCFLine, get_vcf_fsm
 # CNV Confidence
 SAMPLE_ID = "Sample ID"
 SNP_NAME = "SNP Name"
-ALLELE1_FORWARD = "Allele1 - Forward"
-ALLELE2_FORWARD = "Allele2 - Forward"
+ALLELE1 = "Allele1 - Plus"
+ALLELE2 = "Allele2 - Plus"
 
 dbsnp_38_chrs = {
     "NC_000001.11": "chr1",
@@ -254,8 +254,8 @@ class Converter:
             sampleid = row[SAMPLE_ID]
             # TODO handle probes of AA + --
             if sampleid not in calls:
-                calls[sampleid] = (row[ALLELE1_FORWARD], row[ALLELE2_FORWARD])
-            elif calls[sampleid] != (row[ALLELE1_FORWARD], row[ALLELE2_FORWARD]):
+                calls[sampleid] = (row[ALLELE1], row[ALLELE2])
+            elif calls[sampleid] != (row[ALLELE1], row[ALLELE2]):
                 # previous call was different, drop this sample
                 samples_to_drop.add(sampleid)
 
@@ -359,7 +359,7 @@ class Converter:
             else:
                 allele1n = 1 + alt.index(allele1)
 
-            allele2 = row[ALLELE2_FORWARD]
+            allele2 = row[ALLELE2]
             if allele2 not in "ATCG":
                 allele2n = "."
             elif allele2 == ref:
