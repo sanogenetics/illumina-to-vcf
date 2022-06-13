@@ -9,6 +9,7 @@ from typing import Dict, Generator, List, Tuple
 
 from puretabix.tabix import TabixIndexedFile
 from puretabix.vcf import LINE_START, VCFAccumulator, VCFLine, get_vcf_fsm
+from pyfaidx import Fasta
 
 # Sample ID
 # GC Score
@@ -46,60 +47,6 @@ SNP_NAME = "SNP Name"
 ALLELE1 = "Allele1 - Plus"
 ALLELE2 = "Allele2 - Plus"
 
-dbsnp_38_chrs = {
-    "NC_000001.11": "chr1",
-    "NC_000002.12": "chr2",
-    "NC_000003.12": "chr3",
-    "NC_000004.12": "chr4",
-    "NC_000005.10": "chr5",
-    "NC_000006.12": "chr6",
-    "NC_000007.14": "chr7",
-    "NC_000008.11": "chr8",
-    "NC_000009.12": "chr9",
-    "NC_000010.11": "chr10",
-    "NC_000011.10": "chr11",
-    "NC_000012.12": "chr12",
-    "NC_000013.11": "chr13",
-    "NC_000014.9": "chr14",
-    "NC_000015.10": "chr15",
-    "NC_000016.10": "chr16",
-    "NC_000017.11": "chr17",
-    "NC_000018.10": "chr18",
-    "NC_000019.10": "chr19",
-    "NC_000020.11": "chr20",
-    "NC_000021.9": "chr21",
-    "NC_000022.11": "chr22",
-    "NC_000023.11": "chrX",
-    "NC_000024.10": "chrY",
-}
-dbsnp_38_chrs_inv = dict(((j, i) for i, j in dbsnp_38_chrs.items()))
-build_38_sizes = {
-    "chr1": "248956422",
-    "chr2": "242193529",
-    "chr3": "198295559",
-    "chr4": "190214555",
-    "chr5": "181538259",
-    "chr6": "170805979",
-    "chr7": "159345973",
-    "chr8": "145138636",
-    "chr9": "138394717",
-    "chr10": "133797422",
-    "chr11": "135086622",
-    "chr12": "133275309",
-    "chr13": "114364328",
-    "chr14": "107043718",
-    "chr15": "101991189",
-    "chr16": "90338345",
-    "chr17": "83257441",
-    "chr18": "80373285",
-    "chr19": "58617616",
-    "chr20": "64444167",
-    "chr21": "46709983",
-    "chr22": "50818468",
-    "chrX": "156040895",
-    "chrY": "57227415",
-}
-
 strandswap = {"A": "T", "T": "A", "C": "G", "G": "C"}
 
 logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
@@ -128,15 +75,21 @@ class Converter:
     header_done = False
     sample_set = []
 
-    def __init__(self, dbsnp_vcf, dbsnp_vcf_index):
-        with timed(f"dbsnp index loading"):
-            self.dbsnp = TabixIndexedFile.from_files(
-                open(dbsnp_vcf, "rb"), open(dbsnp_vcf_index, "rb")
-            )
+    def __init__(self, fasta, fasta_index):
+        self.ref = Fasta(fasta)
+        self.chromosome_sizes = self.parse_index(fasta_index)
         self.vcf_fsm = get_vcf_fsm()
         self.vcf_accumulator = VCFAccumulator()
         self.sample_set = []
 
+    def parse_index(self, fasta_index):
+        chr_lengths = {}
+        with open(fasta_index, 'rt') as index_fh:
+            index_reader = csv.reader(index_fh, delimiter='\t')
+            for line in index_reader:
+                chr_lengths[line[0]] = line[1]
+        return(chr_lengths)
+    
     def ref_alt_lookup(self, chm: str, pos: int) -> Tuple[str, List[str]]:
 
         # turn the chrX format into other ids
@@ -405,10 +358,10 @@ class Converter:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("dbsnp", help="path to DBSNP VCF")
+    parser.add_argument("fasta", help="path to reference fasta (with fai index)")
     args = parser.parse_args()
 
-    converter = Converter(args.dbsnp, args.dbsnp + ".tbi")
+    converter = Converter(args.fasta, args.fasta + ".fai")
 
     # read from stdin
     # write to stdout
