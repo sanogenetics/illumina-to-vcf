@@ -1,3 +1,5 @@
 in/
 venv/
+data/
 *.vcf.gz.*
+.DS_Store
