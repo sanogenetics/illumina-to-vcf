@@ -90,29 +90,9 @@ class Converter:
                 chr_lengths[line[0]] = line[1]
         return(chr_lengths)
     
-    def ref_alt_lookup(self, chm: str, pos: int) -> Tuple[str, List[str]]:
-
-        # turn the chrX format into other ids
-
-        with timed(f"dbsnp lookup for {chm}:{pos}", 1.0):
-            lines = tuple(self.dbsnp.fetch_lines(dbsnp_38_chrs_inv[chm], pos, pos))
-        if not lines:
-            return "", []
-        assert len(lines) == 1, lines
-
-        # sometimes there are multiple lines at the same position
-        # this violates VCF spec, but its dbSNPs fault
-        # one of these is probably the single nuceotide variant we want
-        line = [l + "\n" for l in lines if "VC=SNV" in l][0]
-
-        # parse the line
-        self.vcf_fsm.run(line, LINE_START, self.vcf_accumulator)
-        vcfline = self.vcf_accumulator.to_vcfline()
-        self.vcf_accumulator.reset()
-
-        assert vcfline.pos == pos
-
-        return vcfline.ref, vcfline.alt
+    def ref_lookup(self, chm: str, pos: int) -> str:
+        ref_base = str(self.ref[chm][pos-1])
+        return ref_base
 
     def _generate_vcf_header(
         self, buildsizes: Dict[str, str], buildname: str, samplename: str
@@ -191,7 +171,7 @@ class Converter:
 
             if not self.header_done:
                 for headerline in self._generate_vcf_header(
-                    build_38_sizes, "GRCh38", "\t".join(self.sample_set)
+                    self.chromosome_sizes, "GRCh38", "\t".join(self.sample_set)
                 ):
                     yield headerline
                 self.header_done = True
@@ -250,42 +230,37 @@ class Converter:
         snp_names = tuple(sorted(frozenset([r[SNP_NAME] for r in block])))
 
         chm = block[0]["Chr"]
+        # convert pseudoautosomal (XY) to X
+        if chm == "XY" or chm == "chrXY":
+            chm = "chrX"
         # force chr prefix
         if not chm.startswith("chr"):
             chm = f"chr{chm}"
-        if chm not in dbsnp_38_chrs_inv:
+        if chm not in self.chromosome_sizes.keys():
             raise ConverterError(
                 f"Unexpected chromosome {block[0]['Chr']}:{block[0]['Position']}"
             )
-
         pos = int(block[0]["Position"])
 
-        ref, alt = self.ref_alt_lookup(chm, pos)
-        if not ref or not alt:
-            raise ConverterError(
-                f"Not a dbSNP SNV {block[0]['Chr']}:{block[0]['Position']}"
-            )
-
-        # using alts from dbSNP lists extra alts that aren't in samples or on the chip
-        # using alts from called probes lists too few alts that are on the chip but not seen
+        ref = self.ref_lookup(chm, pos)
 
         probed = set()
         for row in block:
-            # get probe options & split
-            # [A/C]
             probes = list(row["SNP"][1:-1].split("/"))
             # exclude indel probes
             if probes[0] not in "ATCG" or probes[1] not in "ATCG":
                 raise ConverterError(
                     f"Not a SNV probe {block[0]['Chr']}:{block[0]['Position']}"
                 )
+            strand = block[0]["Plus/Minus Strand"]
+            if strand == '-':
+                probes = [strandswap[probe] for probe in probes]
+            # get probe options & split
+            # [A/C]
 
             probed.update(probes)
 
-        # strand correction if necessary ?
-        # TODO determine this better!
-        if ref not in probed:
-            probed = set((strandswap[p] for p in probed))
+        
 
         # hande ref/alt split
         if ref not in probed:
@@ -300,7 +275,7 @@ class Converter:
         calls = {}
         for row in block:
 
-            allele1 = row[ALLELE1_FORWARD]
+            allele1 = row[ALLELE1]
             if allele1 not in "ATCG":
                 allele1n = "."
             elif allele1 == ref:
@@ -358,7 +333,7 @@ class Converter:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("fasta", help="path to reference fasta (with fai index)")
+    parser.add_argument("--fasta", help="path to reference fasta (with fai index)")
     args = parser.parse_args()
 
     converter = Converter(args.fasta, args.fasta + ".fai")
