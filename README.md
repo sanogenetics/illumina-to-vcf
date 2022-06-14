@@ -32,6 +32,16 @@ Running the script is done like:
 gunzip -c input.csv.gz | python run.py | bgzip > out.vcf.gz
 ```
 
+- these steps can be piped together (also removing indels so they don't get logged as errors)
+```
+grep -v "\[D/I\]" <(unzip -p ../Neuron23/040522-N23_1_MG_FinalReport2.zip | head; \
+  unzip -p ../Neuron23/040522-N23_1_MG_FinalReport2.zip | tail -n+11 | \
+  grep -v NA12878 |sort -Vt , -k 9 -k 10 -k 4 -k 5) | \
+  python run.py --fasta ~/Documents/Sano/local_analyses/QC/Homo_sapiens_assembly38.fasta | \
+  bgzip > data/test.vcf.gz
+```
+
+```
 Polishing includes resorting (sort command earlier uses text sort, so position 1000 is before 10) and tabix indexing
 
 ```sh
