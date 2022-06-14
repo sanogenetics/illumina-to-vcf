@@ -159,7 +159,7 @@ class Converter:
 
     def _generate_vcf_lines(self, input) -> Generator[VCFLine, None, None]:
         for block in self._generate_line_blocks(input):
-            assert len(block) > 1, block
+            assert len(block) >= 1, block
             try:
                 with timed(
                     f"block to vcf",
@@ -178,28 +178,60 @@ class Converter:
 
             yield vcfline
 
-    def _simplify_block(self, block: List[Dict[str, str]]) -> List[Dict[str, str]]:
-
-        # drop duplicate lines from a block (same chm,pos,sample,call)
+    def combine_calls(self, previous_calls, new_calls, previous_probes, new_probes):
+        if previous_calls == new_calls or previous_calls == new_calls[::-1] or new_calls == ('-', '-'): 
+            return(previous_calls)
+        elif new_calls[0] == new_calls[1] and new_calls[0] in previous_calls:
+            if not new_probes[0] in previous_calls or not new_probes[1] in previous_calls:
+                return(previous_calls) # conflicting call is a homozygote where only one of the probes matches the true genotype
+            else:
+                raise ConverterError("conflict!") # both probes match but different call
+        elif previous_calls == ('-', '-'): 
+            return(new_calls)
+        elif previous_calls[0] == previous_calls[1] and previous_calls[0] in new_calls:
+            if new_probes[0] not in previous_probes or new_probes[1] not in previous_probes:
+                return(new_calls) # conflicting call is a het where only one of the probes has been tested previously (and previous call is homozygous)
+            else:
+                raise ConverterError("conflict!") # both probes match but different call
+        else:
+            raise ConverterError("conflict!") # conflicting hets or conflicting homozygotes
+        
+    def _simplify_block(self, block: List[Dict[str, str]]):
+        combined_probes = {}
         calls = {}
-        samples_to_drop = set()
+        conflicts = []
         for row in block:
             sampleid = row[SAMPLE_ID]
-            # TODO handle probes of AA + --
+            strand = row["Plus/Minus Strand"]
+
+            new_probes = list(row["SNP"][1:-1].split("/"))
+            # exclude indel probes
+            if new_probes[0] not in "ATCG" or new_probes[1] not in "ATCG":
+                raise ConverterError(
+                    f"Not a SNV probe {row['Chr']}:{row['Position']}"
+                )
+            if strand == '-':
+                new_probes = [strandswap[probe] for probe in new_probes]
+            new_calls = (row[ALLELE1], row[ALLELE2])
+
             if sampleid not in calls:
-                calls[sampleid] = (row[ALLELE1], row[ALLELE2])
-            elif calls[sampleid] != (row[ALLELE1], row[ALLELE2]):
-                # previous call was different, drop this sample
-                samples_to_drop.add(sampleid)
+                calls[sampleid] = new_calls
+                combined_probes[sampleid] = set(new_probes)
+            else:
+                try:
+                    calls[sampleid] = self.combine_calls(calls[sampleid], new_calls, combined_probes[sampleid], new_probes)
+                except ConverterError as e:
+                    #logger.warning(f"{row['Chr']}:{row['Position']}, {sampleid}: {e}")
+                    conflicts.append(sampleid)
+                combined_probes[sampleid].update(new_probes)
 
-        rows_keep = {}
-        for row in block:
-            sampleid = row[SAMPLE_ID]
-            if sampleid not in samples_to_drop and sampleid not in rows_keep:
-                rows_keep[sampleid] = row
+        probed = set().union(*[combined_probes[sampleid] for sampleid in combined_probes.keys()])
+        
+        # for all samples with conflicting genotype calls, set the call to no call 
+        for sampleid in conflicts:
+            calls[sampleid] = ("-", "-")
 
-        newblock = list(rows_keep.values())
-        return newblock
+        return (calls, probed)
 
     def _line_block_to_vcf_line(self, block: List[Dict[str, str]]) -> VCFLine:
         # if block is silly big skip it
@@ -216,12 +248,11 @@ class Converter:
 
         # if there are multiple probes that agree, thats fine
         # need to remove conflicting and duplicate rows
-        block_simple = self._simplify_block(block)
-        if not block_simple:
-            raise ConverterError(
-                f"Oversimplified block {block[0]['Chr']}:{block[0]['Position']}"
-            )
-        block = block_simple
+        [calls, probed] = self._simplify_block(block)
+        #if not calls:
+        #    raise ConverterError(
+        #        f"Oversimplified block {block[0]['Chr']}:{block[0]['Position']}"
+        #    )
         # can assume each row in block has:
         #  same chm, pos
         #  unique sample names
@@ -233,6 +264,9 @@ class Converter:
         # convert pseudoautosomal (XY) to X
         if chm == "XY" or chm == "chrXY":
             chm = "chrX"
+        # convert MT to M
+        if chm == "MT" or chm == "chrMT":
+            chm = "chrM"
         # force chr prefix
         if not chm.startswith("chr"):
             chm = f"chr{chm}"
@@ -244,24 +278,6 @@ class Converter:
 
         ref = self.ref_lookup(chm, pos)
 
-        probed = set()
-        for row in block:
-            probes = list(row["SNP"][1:-1].split("/"))
-            # exclude indel probes
-            if probes[0] not in "ATCG" or probes[1] not in "ATCG":
-                raise ConverterError(
-                    f"Not a SNV probe {block[0]['Chr']}:{block[0]['Position']}"
-                )
-            strand = block[0]["Plus/Minus Strand"]
-            if strand == '-':
-                probes = [strandswap[probe] for probe in probes]
-            # get probe options & split
-            # [A/C]
-
-            probed.update(probes)
-
-        
-
         # hande ref/alt split
         if ref not in probed:
             raise ConverterError(
@@ -272,10 +288,9 @@ class Converter:
         # alt may not be used, but is what the microarray could check for
 
         # convert calls
-        calls = {}
-        for row in block:
-
-            allele1 = row[ALLELE1]
+        converted_calls = {}
+        for sampleid in calls:
+            allele1 = calls[sampleid][0]
             if allele1 not in "ATCG":
                 allele1n = "."
             elif allele1 == ref:
@@ -287,7 +302,7 @@ class Converter:
             else:
                 allele1n = 1 + alt.index(allele1)
 
-            allele2 = row[ALLELE2]
+            allele2 = calls[sampleid][1]
             if allele2 not in "ATCG":
                 allele2n = "."
             elif allele2 == ref:
@@ -299,19 +314,19 @@ class Converter:
             else:
                 allele2n = 1 + alt.index(allele2)
 
-            assert row[SAMPLE_ID] not in calls
-            calls[row[SAMPLE_ID]] = f"{allele1n}/{allele2n}"
+            assert sampleid not in converted_calls
+            converted_calls[sampleid] = f"{allele1n}/{allele2n}"
 
         # always need to have all samples on all rows
         # even if that samples has been filtered out e.g. conflicting probes
         samples = []
         for sampleid in self.sample_set:
-            samples.append({"GT": calls.get(sampleid, "./.")})
+            samples.append({"GT": converted_calls.get(sampleid, "./.")})
 
         vcfline = VCFLine(
             "", "", "", {}, chm, pos, snp_names, ref, alt, ".", ["PASS"], {}, samples
         )
-        vcfline = self.clean_vcf_line(vcfline)
+        #vcfline = self.clean_vcf_line(vcfline)
 
         return vcfline
 
