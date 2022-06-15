@@ -7,7 +7,6 @@ import time
 from contextlib import contextmanager
 from typing import Dict, Generator, List, Tuple
 
-from puretabix.tabix import TabixIndexedFile
 from puretabix.vcf import LINE_START, VCFAccumulator, VCFLine, get_vcf_fsm
 from pyfaidx import Fasta
 
@@ -105,6 +104,8 @@ class Converter:
         yield VCFLine.as_comment_key_string("fileformat", "VCFv4.3")
         yield VCFLine.as_comment_key_string("filedate", date)
         yield VCFLine.as_comment_key_string("source", f'"{source}, Sano Genetics"')
+        
+        # ##FILTER=<ID=PASS,Description="All filters passed">
         yield VCFLine.as_comment_key_dict(
             "FILTER",
             {
@@ -112,8 +113,7 @@ class Converter:
                 "Description": '"All filters passed"'
             } 
         )          
-        # write SAMPLE
-        # write FORMAT
+
         # ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
         yield VCFLine.as_comment_key_dict(
 
@@ -125,6 +125,7 @@ class Converter:
                 "Description": "Genotype",
             }
         )
+
         # write contig
         for chrom, length in buildsizes.items():
             # ##contig=<ID=1,length=249250621,assembly=GRCh37>
@@ -313,7 +314,7 @@ class Converter:
         # hande ref/alt split
         if ref not in probed:
             raise ConverterError(
-                f"Reference ({ref}) not probed ({','.join(probed)}) {block[0]['Chr']}:{block[0]['Position']}"
+                f"{';'.join(snp_names)}: Reference ({ref}) not probed ({','.join(probed)}) {block[0]['Chr']}:{block[0]['Position']}"
             )
         probed.remove(ref)
         alt = tuple(sorted(probed))
