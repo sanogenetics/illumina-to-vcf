@@ -48,7 +48,6 @@ SNP_NAME = "SNP Name"
 ALLELE1 = "Allele1 - Plus"
 ALLELE2 = "Allele2 - Plus"
 STRAND = "Plus/Minus Strand"
-DELIM = ","
 genome_build = "GRCh38"
 strandswap = {"A": "T", "T": "A", "C": "G", "G": "C"}
 
@@ -80,12 +79,16 @@ class Converter:
     header_done = False
     sample_set = []
 
-    def __init__(self, fasta, fasta_index):
+    def __init__(self, fasta, fasta_index, tab):
         self.ref = Fasta(fasta)
         self.chromosome_sizes = self.parse_index(fasta_index)
         self.vcf_fsm = get_vcf_fsm()
         self.vcf_accumulator = VCFAccumulator()
         self.sample_set = []
+        if tab:
+            self.delim = '\t'
+        else:
+            self.delim = ','
 
     def parse_index(self, fasta_index):
         chr_lengths = {}
@@ -140,18 +143,18 @@ class Converter:
 
 
     def _generate_lines(self, input) -> Generator[Dict[str, str], None, None]:
-        for row in csv.DictReader(input, delimiter=DELIM):
+        for row in csv.DictReader(input, delimiter=self.delim):
             yield row
 
     def _parse_file_header(self, input):
         file_header = [row for row in itertools.islice(input, 0, 9)]
-        source=file_header[3].split(DELIM)[-1].split('.')[0].lstrip()
+        source=file_header[3].split(self.delim)[-1].split('.')[0].lstrip()
 
         # need some validation on the dates here because there's a good chance they
         # will switch up the format on us at some point
         # this will currently work for month/day/year and year-month-day
         # (I guess also for month-day-year and year/month/day)
-        date=file_header[2].split(DELIM)[-1].lstrip().split(' ')[0]
+        date=file_header[2].split(self.delim)[-1].lstrip().split(' ')[0]
         date_components=date.replace('/', '-').split('-')
         if len(date_components) != 3:
             raise DateError(f"Cannot parse Processing date {date} from line {file_header[2]}")
@@ -391,9 +394,10 @@ class Converter:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--fasta", help="path to reference fasta (with fai index)")
+    parser.add_argument("--tab", action='store_true', help="use tabs as delimitor rather than comma")
     args = parser.parse_args()
 
-    converter = Converter(args.fasta, args.fasta + ".fai")
+    converter = Converter(args.fasta, args.fasta + ".fai", args.tab)
 
     # read from stdin
     # write to stdout
