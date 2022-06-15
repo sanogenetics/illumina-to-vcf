@@ -47,6 +47,7 @@ SNP_NAME = "SNP Name"
 ALLELE1 = "Allele1 - Plus"
 ALLELE2 = "Allele2 - Plus"
 
+genome_build = "GRCh38"
 strandswap = {"A": "T", "T": "A", "C": "G", "G": "C"}
 
 logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
@@ -66,6 +67,8 @@ def timed(message, minimum=1.0):
 class ConverterError(Exception):
     pass
 
+class DateError(Exception):
+    pass
 
 class Converter:
     row_previous_loc = None
@@ -95,23 +98,32 @@ class Converter:
         return ref_base
 
     def _generate_vcf_header(
-        self, buildsizes: Dict[str, str], buildname: str, samplename: str
+        self, input, buildsizes: Dict[str, str], buildname: str
     ) -> Generator[VCFLine, None, None]:
-
+        (date, source) = self._parse_file_header(input)
         # write header
         yield VCFLine.as_comment_key_string("fileformat", "VCFv4.3")
-        # TODO write INFO
+        yield VCFLine.as_comment_key_string("filedate", date)
+        yield VCFLine.as_comment_key_string("source", f'"{source}, Sano Genetics"')
+        yield VCFLine.as_comment_key_dict(
+            "FILTER",
+            {
+                "ID": "PASS",
+                "Description": '"All filters passed"'
+            } 
+        )          
         # write SAMPLE
         # write FORMAT
         # ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
         yield VCFLine.as_comment_key_dict(
+
             "FORMAT",
             {
                 "ID": "GT",
                 "Number": "1",
                 "Type": "String",
                 "Description": "Genotype",
-            },
+            }
         )
         # write contig
         for chrom, length in buildsizes.items():
@@ -121,27 +133,33 @@ class Converter:
                 {"ID": chrom, "length": length, "assembly": buildname},
             )
 
-        # write the header
-        yield VCFLine.as_comment_raw(
-            "\t".join(
-                (
-                    "CHROM",
-                    "POS",
-                    "ID",
-                    "REF",
-                    "ALT",
-                    "QUAL",
-                    "FILTER",
-                    "INFO",
-                    "FORMAT",
-                    samplename,  # customizable name of sample
-                )
-            )
-        )
 
     def _generate_lines(self, input) -> Generator[Dict[str, str], None, None]:
-        for row in csv.DictReader(itertools.islice(input, 9, None)):
+        for row in csv.DictReader(input):
             yield row
+
+    def _parse_file_header(self, input):
+        file_header = [row for row in itertools.islice(input, 0, 9)]
+        source=file_header[3].split(',')[-1].split('.')[0].lstrip()
+
+        # need some validation on the dates here because there's a good chance they
+        # will switch up the format on us at some point
+        # this will currently work for month/day/year and year-month-day
+        # (I guess also for month-day-year and year/month/day)
+        date=file_header[2].split(',')[-1].lstrip().split(' ')[0]
+        date_components=date.replace('/', '-').split('-')
+        if len(date_components) != 3:
+            raise DateError(f"Cannot parse Processing date {date}")
+        if len(date_components[2]) == 4:
+            date_components = [date_components[2], date_components[0], date_components[1]]
+        elif len(date_components[0]) != 4:
+            raise DateError(f"Cannot parse Processing date {date}")
+        if int(date_components[1]) > 12:
+            raise DateError(f"Cannot parse Processing date {date}")
+        date_components[1] = date_components[1].zfill(2)
+        date_components[2] = date_components[2].zfill(2)
+        date=''.join(date_components)
+        return(date, source)
 
     def _generate_line_blocks(
         self, input
@@ -170,10 +188,24 @@ class Converter:
                 continue
 
             if not self.header_done:
-                for headerline in self._generate_vcf_header(
-                    self.chromosome_sizes, "GRCh38", "\t".join(self.sample_set)
-                ):
-                    yield headerline
+                # write the header
+                yield VCFLine.as_comment_raw(
+                    "\t".join(
+                        (
+                        "CHROM",
+                        "POS",
+                        "ID",
+                        "REF",
+                       "ALT",
+                        "QUAL",
+                        "FILTER",
+                        "INFO",
+                        "FORMAT",
+                        "\t".join(self.sample_set),  # customizable name of sample
+                        )
+
+                    )
+                )
                 self.header_done = True
 
             yield vcfline
@@ -234,7 +266,7 @@ class Converter:
         return (calls, probed)
 
     def _line_block_to_vcf_line(self, block: List[Dict[str, str]]) -> VCFLine:
-        # if block is silly big skip it
+        # if block is silly big skip it (this will fail with >100 samples)
         if len(block) > 100 or (self.sample_set and len(block) > 10 * len(self.sample_set)):
             raise ConverterError(
                 f"Oversized block {block[0]['Chr']}:{block[0]['Position']}: {len(block)} rows"
@@ -340,6 +372,9 @@ class Converter:
         return vcfline
 
     def convert(self, input, outfile):
+        for headerline in self._generate_vcf_header(input, self.chromosome_sizes, genome_build):
+            outfile.write(str(headerline))
+            outfile.write("\n")
         for vcfline in self._generate_vcf_lines(input):
             outfile.write(str(vcfline))
             outfile.write("\n")
