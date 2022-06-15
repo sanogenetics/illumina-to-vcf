@@ -235,9 +235,9 @@ class Converter:
 
     def _line_block_to_vcf_line(self, block: List[Dict[str, str]]) -> VCFLine:
         # if block is silly big skip it
-        if len(block) > 100:
+        if len(block) > 100 or (self.sample_set and len(block) > 10 * len(self.sample_set)):
             raise ConverterError(
-                f"Oversized block {block[0]['Chr']}:{block[0]['Position']}"
+                f"Oversized block {block[0]['Chr']}:{block[0]['Position']}: {len(block)} rows"
             )
 
         # if we've not got a list of samples yet, get them from this block unfiltered
@@ -281,7 +281,7 @@ class Converter:
         # hande ref/alt split
         if ref not in probed:
             raise ConverterError(
-                f"Reference not probed {block[0]['Chr']}:{block[0]['Position']}"
+                f"Reference ({ref}) not probed ({','.join(probed)}) {block[0]['Chr']}:{block[0]['Position']}"
             )
         probed.remove(ref)
         alt = tuple(sorted(probed))
