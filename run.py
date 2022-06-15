@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import argparse
 import csv
 import itertools
@@ -46,7 +48,7 @@ SNP_NAME = "SNP Name"
 ALLELE1 = "Allele1 - Plus"
 ALLELE2 = "Allele2 - Plus"
 STRAND = "Plus/Minus Strand"
-
+DELIM = ","
 genome_build = "GRCh38"
 strandswap = {"A": "T", "T": "A", "C": "G", "G": "C"}
 
@@ -89,6 +91,7 @@ class Converter:
         chr_lengths = {}
         with open(fasta_index, 'rt') as index_fh:
             index_reader = csv.reader(index_fh, delimiter='\t')
+
             for line in index_reader:
                 chr_lengths[line[0]] = line[1]
         return(chr_lengths)
@@ -137,27 +140,27 @@ class Converter:
 
 
     def _generate_lines(self, input) -> Generator[Dict[str, str], None, None]:
-        for row in csv.DictReader(input):
+        for row in csv.DictReader(input, delimiter=DELIM):
             yield row
 
     def _parse_file_header(self, input):
         file_header = [row for row in itertools.islice(input, 0, 9)]
-        source=file_header[3].split(',')[-1].split('.')[0].lstrip()
+        source=file_header[3].split(DELIM)[-1].split('.')[0].lstrip()
 
         # need some validation on the dates here because there's a good chance they
         # will switch up the format on us at some point
         # this will currently work for month/day/year and year-month-day
         # (I guess also for month-day-year and year/month/day)
-        date=file_header[2].split(',')[-1].lstrip().split(' ')[0]
+        date=file_header[2].split(DELIM)[-1].lstrip().split(' ')[0]
         date_components=date.replace('/', '-').split('-')
         if len(date_components) != 3:
-            raise DateError(f"Cannot parse Processing date {date}")
+            raise DateError(f"Cannot parse Processing date {date} from line {file_header[2]}")
         if len(date_components[2]) == 4:
             date_components = [date_components[2], date_components[0], date_components[1]]
         elif len(date_components[0]) != 4:
-            raise DateError(f"Cannot parse Processing date {date}")
+            raise DateError(f"Cannot parse Processing date {date} from line {file_header[2]}")
         if int(date_components[1]) > 12:
-            raise DateError(f"Cannot parse Processing date {date}")
+            raise DateError(f"Cannot parse Processing date {date} from line {file_header[2]}")
         date_components[1] = date_components[1].zfill(2)
         date_components[2] = date_components[2].zfill(2)
         date=''.join(date_components)
@@ -176,7 +179,8 @@ class Converter:
                 block = []
             if row["SNP"] != "[D/I]" and row["SNP"] != "[I/D]" and not "ilmndup" in row[SNP_NAME]:
                 block.append(row)
-        yield block
+        if block:
+            yield block
 
     def _generate_vcf_lines(self, input) -> Generator[VCFLine, None, None]:
         for block in self._generate_line_blocks(input):
