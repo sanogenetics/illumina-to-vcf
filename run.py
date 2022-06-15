@@ -45,6 +45,7 @@ SAMPLE_ID = "Sample ID"
 SNP_NAME = "SNP Name"
 ALLELE1 = "Allele1 - Plus"
 ALLELE2 = "Allele2 - Plus"
+STRAND = "Plus/Minus Strand"
 
 genome_build = "GRCh38"
 strandswap = {"A": "T", "T": "A", "C": "G", "G": "C"}
@@ -173,7 +174,8 @@ class Converter:
             ):
                 yield block
                 block = []
-            block.append(row)
+            if row["SNP"] != "[D/I]" and row["SNP"] != "[I/D]" and not "ilmndup" in row[SNP_NAME]:
+                block.append(row)
         yield block
 
     def _generate_vcf_lines(self, input) -> Generator[VCFLine, None, None]:
@@ -235,7 +237,7 @@ class Converter:
         conflicts = []
         for row in block:
             sampleid = row[SAMPLE_ID]
-            strand = row["Plus/Minus Strand"]
+            strand = row[STRAND]
 
             new_probes = list(row["SNP"][1:-1].split("/"))
             # exclude indel probes
