@@ -34,19 +34,18 @@ unzip -p FinalReport.zip | tail -n+11 | grep -v NA12878 |sort -Vt , -k 9 -k 10 -
 Running the script is done like:
 
 ```sh
-gunzip -c input.txt.gz | python run.py --fasta Homo_sapiens_assembly38.fasta --tab | bgzip > output.vcf.gz
+gunzip -c input.txt.gz | python illumina2vcf --fasta Homo_sapiens_assembly38.fasta --tab | bgzip > output.vcf.gz
 ```
 
 - these steps can be piped together
 ```sh
-unzip -p FinalReport.zip | head; \
-unzip -p FinalReport.zip | tail -n+11 \
-| grep -v NA12878 |sort -Vt , -k 9 -k 10 -k 4 -k 5 \
-| python run.py --fasta Homo_sapiens_assembly38.fasta \
-| bgzip > out.vcf.gz
-```
+cat <(unzip -p FinalReport.zip | head; \
+unzip -p FinalReport.zip | tail -n+11 | \
+grep -v NA12878 |sort -Vt , -k 9 -k 10 -k 4 -k 5) | \
+python illumina2vcf --fasta Homo_sapiens_assembly38.fasta | \
+bgzip > out.vcf.gz
 
-Polishing includes resorting (sort command earlier uses text sort, so position 1000 is before 10) and tabix indexing
+Polishing includes resorting (chrX SNPs out of order because chrXY get converted to chrX) and tabix indexing
 
 ```sh
 bcftools sort out.vcf.gz | bcftools view -s ^NA12878 --no-version --no-update -Oz > out.clean.vcf.gz
@@ -70,7 +69,7 @@ development
 ```sh
 python3 -m venv venv # Create virtual environment
 source venv/bin/activate # Activate virtual environment
-pip install -e .[dev]  # Install using pip including development extras
+pip install -e '.[dev]'  # Install using pip including development extras
 pre-commit install  # Enable pre-commit hooks
 pre-commit run --all-files  # Run pre-commit hooks without committing
 # Note pre-commit is configured to use:
