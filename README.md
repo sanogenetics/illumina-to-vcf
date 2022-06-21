@@ -65,7 +65,7 @@ development
 ```sh
 python3 -m venv venv # Create virtual environment
 source venv/bin/activate # Activate virtual environment
-pip install -e .[dev]  # Install using pip including development extras
+pip install -e '.[dev]'  # Install using pip including development extras
 pre-commit install  # Enable pre-commit hooks
 pre-commit run --all-files  # Run pre-commit hooks without committing
 # Note pre-commit is configured to use:
