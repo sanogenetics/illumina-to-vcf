@@ -48,3 +48,12 @@ Polishing includes resorting (sort command earlier uses text sort, so position 1
 bcftools sort out.vcf.gz | bcftools view -s ^NA12878 --no-version --no-update -Oz > out.clean.vcf.gz
 tabix out.clean.vcf.gz
 ```
+
+SNPs listed in a test file can be excluded using the `--blacklist` option
+
+GSAMD-24v3-0-EA_20034606_A2_blacklist.txt contains all SNPs on the GSA+MD chip that have
+a call rate <95% across 267 LRRK2 samples processed between mid Jan and mid June 2022 
+plus 1475 GOLD samples. Plus SNPs that have HWE violations < e-6 in either dataset 
+(except for chrX where it was only calculated for female samples from the GOLD study).
+There are a number of SNPs that have large allele frequency deviations relative to 1KGP
+but I've not (yet) included them in this list.
