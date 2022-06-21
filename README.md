@@ -15,7 +15,7 @@ prepare input
 get the header that won't be sorted:
 
 ```sh
-unzip -p ~/sano/playground/eurofins_ftp_us/2022_04_19/N23_1_FinalReport.zip | head | gzip > input.csv.gz
+unzip -p FinalReport.zip | head | gzip > input.csv.gz
 ```
 
 get and sort the rest, removing reference sample on the way.
@@ -23,22 +23,22 @@ get and sort the rest, removing reference sample on the way.
 - not sure if that's going to cause tabix to break or not
 
 ```sh
-unzip -p ~/sano/playground/eurofins_ftp_us/2022_04_19/N23_1_FinalReport.zip | tail -n+11 | grep -v NA12878 |sort -Vt , -k 9 -k 10 -k 4 -k 5 | gzip >> input.csv.gz
+unzip -p FinalReport.zip | tail -n+11 | grep -v NA12878 |sort -Vt , -k 9 -k 10 -k 4 -k 5 | gzip >> input.csv.gz
 ```
 
 Running the script is done like:
 
 ```sh
-gunzip -c input.csv.gz | python run.py | bgzip > out.vcf.gz
+gunzip -c input.txt.gz | python run.py --fasta Homo_sapiens_assembly38.fasta --tab | bgzip > output.vcf.gz
 ```
 
-- these steps can be piped together (also removing indels so they don't get logged as errors)
+- these steps can be piped together
 ```
-grep -v "\[D/I\]" <(unzip -p ../Neuron23/040522-N23_1_MG_FinalReport2.zip | head; \
-  unzip -p ../Neuron23/040522-N23_1_MG_FinalReport2.zip | tail -n+11 | \
-  grep -v NA12878 |sort -Vt , -k 9 -k 10 -k 4 -k 5) | \
-  python run.py --fasta ~/Documents/Sano/local_analyses/QC/Homo_sapiens_assembly38.fasta | \
-  bgzip > data/test.vcf.gz
+unzip -p FinalReport.zip | head; \
+unzip -p FinalReport.zip | tail -n+11 | \
+grep -v NA12878 |sort -Vt , -k 9 -k 10 -k 4 -k 5 | \
+python run.py --fasta Homo_sapiens_assembly38.fasta | \
+bgzip > out.vcf.gz
 ```
 
 ```
@@ -48,3 +48,32 @@ Polishing includes resorting (sort command earlier uses text sort, so position 1
 bcftools sort out.vcf.gz | bcftools view -s ^NA12878 --no-version --no-update -Oz > out.clean.vcf.gz
 tabix out.clean.vcf.gz
 ```
+
+
+development
+-----------
+
+```sh
+python3 -m venv venv # Create virtual environment
+source venv/bin/activate # Activate virtual environment
+pip install -e .[dev]  # Install using pip including development extras
+pre-commit install  # Enable pre-commit hooks
+pre-commit run --all-files  # Run pre-commit hooks without committing
+# Note pre-commit is configured to use:
+# - seed-isort-config to better categorise third party imports
+# - isort to sort imports
+# - black to format code
+pip-compile  # Freeze dependencies
+pytest  # Run tests
+coverage run -m pytest && coverage report -m  # Run tests, print coverage
+mypy .  # Type checking
+pipdeptree  # Print dependencies
+```
+
+Global git ignores per https://help.github.com/en/github/using-git/ignoring-files#configuring-ignored-files-for-all-repositories-on-your-computer
+
+For release to PyPI see https://packaging.python.org/tutorials/packaging-projects/
+
+To add a new development dependency, add to `requirements-dev.in` then run `pip-compile requirements.in`
+
+To add a new dependency, add to `requirements.in` then run `pip-compile`

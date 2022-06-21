@@ -1,5 +1,8 @@
 in/
 venv/
 data/
-*.vcf.gz.*
+*.vcf.gz
+*.vcf.gz.tbi
 .DS_Store
+*.egg-info
+**__pycache__
