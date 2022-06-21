@@ -1,5 +1,10 @@
+Illumina2VCF
+===========
 
+This is tool for converting Illumina FinalReport microarray results into VCF files. This reconciles multiple probes for the same location, as well as including the reference allele appropriately.
 
+usage
+-----
 
 several steps to the process
 
@@ -39,7 +44,6 @@ unzip -p FinalReport.zip | tail -n+11 | \
 grep -v NA12878 |sort -Vt , -k 9 -k 10 -k 4 -k 5) | \
 python illumina2vcf --fasta Homo_sapiens_assembly38.fasta | \
 bgzip > out.vcf.gz
-```
 
 Polishing includes resorting (chrX SNPs out of order because chrXY get converted to chrX) and tabix indexing
 

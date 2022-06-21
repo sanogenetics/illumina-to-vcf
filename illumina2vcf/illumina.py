@@ -22,9 +22,24 @@ class DateError(Exception):
 
 class IlluminaReader:
     delimiter: str
+    blocklist_filename: str
+    _blocklist: frozenset[str] = frozenset()
 
-    def __init__(self, delimiter):
+    def __init__(self, delimiter: str, blocklist_filename: str = ""):
         self.delimiter = delimiter
+        self.blocklist_filename = blocklist_filename
+
+    @property
+    def blocklist(self) -> frozenset[str]:
+        if not self.blocklist_filename:
+            return frozenset()
+        if not self._blocklist:
+            blocklist = set()
+            with open(self.blocklist_filename, "rt") as input:
+                for line in input:
+                    blocklist.add(line.strip())
+            self._blocklist = frozenset(blocklist)
+        return self._blocklist
 
     def parse_header(self, source) -> Tuple[str, str]:
         file_header = []
@@ -56,13 +71,13 @@ Total Samples	24"""
         date = file_header[2].split(self.delimiter)[-1].lstrip().split(" ")[0]
         date_components = date.replace("/", "-").split("-")
         if len(date_components) != 3:
-            raise DateError(f"Cannot parse Processing date {date} from line {file_header[2]}")
+            raise DateError(f"Cannot parse Processing date '{date}' from line '{file_header[2]}'")
         if len(date_components[2]) == 4:
             date_components = [date_components[2], date_components[0], date_components[1]]
         elif len(date_components[0]) != 4:
-            raise DateError(f"Cannot parse Processing date {date} from line {file_header[2]}")
+            raise DateError(f"Cannot parse Processing date '{date}' from line '{file_header[2]}'")
         if int(date_components[1]) > 12:
-            raise DateError(f"Cannot parse Processing date {date} from line {file_header[2]}")
+            raise DateError(f"Cannot parse Processing date '{date}' from line '{file_header[2]}'")
         date_components[1] = date_components[1].zfill(2)
         date_components[2] = date_components[2].zfill(2)
         date = "".join(date_components)
@@ -75,10 +90,21 @@ Total Samples	24"""
             if block and (block[0][CHR] != row[CHR] or block[0][POSITION] != row[POSITION]):
                 yield block
                 block = []
-            # ignore rows that are indels
+            # ignore blocked probes
+            if row[SNP_NAME] in self.blocklist:
+                logger.debug(f"Ignoring blocked {row[SNP_NAME]}")
+                continue
             # ignore rows that are illumina duplicates
-            if row[SNP] not in ("[D/I]", "[I/D]") and not "ilmndup" in row[SNP_NAME]:
-                block.append(row)
+            if "ilmndup" in row[SNP_NAME]:
+                logger.debug(f"Ignoring ilmndup {row[SNP_NAME]}")
+                continue
+            # ignore rows that are indels
+            if row[SNP] in ("[D/I]", "[I/D]"):
+                logger.debug(f"Ignoring indel {row[SNP_NAME]}")
+                continue
+
+            block.append(row)
+
         # if there is a final bloc, yield that too
         if block:
             yield block
