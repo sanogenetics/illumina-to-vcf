@@ -14,9 +14,6 @@ several steps to the process
 
 this is necessary because the vcf has multiple samples on each row
 
-
-prepare input
-
 get the header that won't be sorted:
 
 ```sh
@@ -25,33 +22,33 @@ unzip -p FinalReport.zip | head | gzip > input.csv.gz
 
 get and sort the rest, removing reference sample on the way.
 - this should be sorted correctly, except that chrMT will come before chrX, chrY and chrXY
-- not sure if that's going to cause tabix to break or not
 
 ```sh
-unzip -p FinalReport.zip | tail -n+11 | grep -v NA12878 |sort -Vt , -k 9 -k 10 -k 4 -k 5 | gzip >> input.csv.gz
+unzip -p FinalReport.zip | tail -n+11 | grep -v NA12878 | sort -Vt , -k 9 -k 10 -k 4 -k 5 | gzip >> input.csv.gz
 ```
 
 Running the script is done like:
 
 ```sh
-gunzip -c input.txt.gz | python run.py --fasta Homo_sapiens_assembly38.fasta --tab | bgzip > output.vcf.gz
+gunzip -c input.txt.gz | python3 -m illumina2vcf --fasta Homo_sapiens_assembly38.fasta --tab | bgzip > output.vcf.gz
 ```
 
-- these steps can be piped together
-```sh
-unzip -p FinalReport.zip | head; \
-unzip -p FinalReport.zip | tail -n+11 \
-| grep -v NA12878 |sort -Vt , -k 9 -k 10 -k 4 -k 5 \
-| python run.py --fasta Homo_sapiens_assembly38.fasta \
-| bgzip > out.vcf.gz
-```
-
-Polishing includes resorting (sort command earlier uses text sort, so position 1000 is before 10) and tabix indexing
+Polishing includes resorting (sort command earlier uses text sort, so position 1000 is before 10) and tabix indexing:
 
 ```sh
 bcftools sort out.vcf.gz | bcftools view -s ^NA12878 --no-version --no-update -Oz > out.clean.vcf.gz
 tabix out.clean.vcf.gz
 ```
+
+Note these steps can be piped together
+```sh
+{ unzip -p FinalReport.zip | head; \
+  unzip -p FinalReport.zip | tail -n+11 \
+  | grep -v NA12878 | sort -Vt , -k 9 -k 10 -k 4 -k 5 \
+ } | python3 -m illumina2vcf --fasta Homo_sapiens_assembly38.fasta --tab \
+| bcftools sort out.vcf.gz | bcftools view -s ^NA12878 --no-version --no-update -Oz > out.vcf.gz
+```
+
 blocklist
 ---------
 
