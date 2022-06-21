@@ -33,7 +33,7 @@ gunzip -c input.txt.gz | python run.py --fasta Homo_sapiens_assembly38.fasta --t
 ```
 
 - these steps can be piped together
-```
+```sh
 unzip -p FinalReport.zip | head; \
 unzip -p FinalReport.zip | tail -n+11 | \
 grep -v NA12878 |sort -Vt , -k 9 -k 10 -k 4 -k 5 | \
@@ -41,17 +41,26 @@ python run.py --fasta Homo_sapiens_assembly38.fasta | \
 bgzip > out.vcf.gz
 ```
 
-```
 Polishing includes resorting (sort command earlier uses text sort, so position 1000 is before 10) and tabix indexing
 
 ```sh
 bcftools sort out.vcf.gz | bcftools view -s ^NA12878 --no-version --no-update -Oz > out.clean.vcf.gz
 tabix out.clean.vcf.gz
 ```
+blocklist
+---------
 
+SNPs listed in a file can be excluded using the `--blocklist` option
+
+GSAMD-24v3-0-EA_20034606_A2_blacklist.txt contains all SNPs on the GSA+MD chip that have
+a call rate <95% across 267 LRRK2 samples processed between mid Jan and mid June 2022
+plus 1475 GOLD samples. Plus SNPs that have HWE violations < e-6 in either dataset
+(except for chrX where it was only calculated for female samples from the GOLD study).
+There are a number of SNPs that have large allele frequency deviations relative to 1KGP
+but have not (yet) included them in this list.
 
 development
------------
+===========
 
 ```sh
 python3 -m venv venv # Create virtual environment

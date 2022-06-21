@@ -71,6 +71,7 @@ class ConverterError(Exception):
 class DateError(Exception):
     pass
 
+
 class Converter:
     row_previous_loc = None
     row_previous = None
@@ -79,9 +80,13 @@ class Converter:
     header_done = False
     sample_set = []
 
-    def __init__(self, fasta, fasta_index, tab):
+    def __init__(self, fasta, fasta_index, tab, blacklist_file):
         self.ref = Fasta(fasta)
         self.chromosome_sizes = self.parse_index(fasta_index)
+        if blacklist_file:
+            self.blacklist = self.parse_blacklist(blacklist_file)
+        else:
+            self.blacklist = {}
         self.vcf_fsm = get_vcf_fsm()
         self.vcf_accumulator = VCFAccumulator()
         self.sample_set = []
@@ -98,7 +103,12 @@ class Converter:
             for line in index_reader:
                 chr_lengths[line[0]] = line[1]
         return(chr_lengths)
-    
+
+    def parse_blacklist(self, blacklist_file):
+        with open(blacklist_file, 'rt') as blacklist_fh:
+            blacklist = set([ SNP.strip() for SNP in blacklist_fh])
+        return(blacklist)
+
     def ref_lookup(self, chm: str, pos: int) -> str:
         ref_base = str(self.ref[chm][pos-1])
         return ref_base
@@ -195,6 +205,8 @@ class Converter:
                     vcfline = self._line_block_to_vcf_line(block)
             except ConverterError as e:
                 logger.error(e)
+                continue
+            if not vcfline:
                 continue
 
             if not self.header_done:
@@ -301,6 +313,9 @@ class Converter:
         #  had consistent calls
 
         snp_names = tuple(sorted(frozenset([r[SNP_NAME] for r in block])))
+        snp_name = ';'.join(snp_names) 
+        if snp_name in self.blacklist:
+            return()
 
         chm = block[0]["Chr"]
         # convert pseudoautosomal (XY) to X
@@ -394,10 +409,11 @@ class Converter:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--fasta", help="path to reference fasta (with fai index)")
+    parser.add_argument("--blacklist", help="path to SNP blacklist")
     parser.add_argument("--tab", action='store_true', help="use tabs as delimitor rather than comma")
     args = parser.parse_args()
 
-    converter = Converter(args.fasta, args.fasta + ".fai", args.tab)
+    converter = Converter(args.fasta, args.fasta + ".fai", args.tab, args.blacklist)
 
     # read from stdin
     # write to stdout
