@@ -1,0 +1,12 @@
+-c requirements.txt
+# the line above constricts the dependencies to
+# those compatible with requriements.txt
+
+pytest-cov
+flake8
+black
+pylint
+mypy
+pip-tools
+pipdeptree
+pre-commit
