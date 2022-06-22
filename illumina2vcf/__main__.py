@@ -18,9 +18,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--comma", "-c", action="store_const", const=",", dest="delim", help="comma as delimitor in source"
     )
-    parser.add_argument(
-        "--blocklist", default="ref/GSAMD-24v3-0-EA_20034606_A2_blocklist.txt", help="path to probe name blocklist"
-    )
+    parser.add_argument("--blocklist", default="", help="path to probe name blocklist")
     args = parser.parse_args()
 
     converter = Converter(args.fasta, args.fasta + ".fai", args.blocklist, args.delim)
