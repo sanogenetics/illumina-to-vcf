@@ -8,10 +8,10 @@ logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
 
-    logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
+    logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
     parser = argparse.ArgumentParser()
     # TODO make non-optional argument
-    parser.add_argument("--fasta", help="path to reference fasta, and .fai index")
+    parser.add_argument("--fasta", required=True, help="path to reference fasta, and .fai index")
     parser.add_argument(
         "--tab", "-t", action="store_const", const="\t", dest="delim", help="tab as delimitor in source"
     )
