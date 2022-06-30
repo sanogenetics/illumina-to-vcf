@@ -1,7 +1,9 @@
 import csv
 import logging
-from typing import Dict, Generator, Iterable, List, Tuple
+import re
+from typing import Dict, Generator, Iterable, List, Tuple, Union
 
+from fsspec.core import OpenFiles
 from puretabix.vcf import VCFLine
 from pyfaidx import Fasta
 
@@ -18,29 +20,28 @@ class ConverterError(Exception):
 
 class VCFMaker:
 
-    reference_filename: str
-    reference_index_filename: str
-    reference: Fasta
+    reference: Union[str, OpenFiles]
+    reference_index: Union[str, OpenFiles]
+    reference_fasta: Fasta
     _buildsizes: Dict[str, str] = {}
 
-    def __init__(self, reference_filename: str, reference_index_filename: str) -> None:
-        self.reference_filename = reference_filename
-        self.reference_index_filename = reference_index_filename
-        self.reference = Fasta(reference_filename)
+    def __init__(self, reference: Union[str, OpenFiles], reference_index: Union[str, OpenFiles]) -> None:
+        self.reference = reference
+        self.reference_index = reference_index
+        self.reference_fasta = Fasta(
+            reference,
+            reference_index,
+            read_ahead=1024 * 16,  # 16kb read ahead buffer
+        )
 
-    @property
-    def buildsizes(self) -> Dict[str, str]:
-        if not self._buildsizes:
-            with open(self.reference_index_filename, "rt") as index_fh:
-                index_reader = csv.reader(index_fh, delimiter="\t")
-                for line in index_reader:
-                    self._buildsizes[line[0]] = line[1]
-        return self._buildsizes
+    @staticmethod
+    def is_valid_chromosome(chrom: str):
+        return re.match(r"^chr[1-9XYM][0-9]?$", chrom)
 
     def ref_lookup(self, chm: str, pos: int) -> str:
         # VCF is 1-based
         # FASTA is 0-based
-        ref_base = str(self.reference[chm][pos - 1])
+        ref_base = str(self.reference_fasta[chm][pos - 1])
         return ref_base
 
     def generate_header(self, date: str, source: str, buildname: str) -> Generator[VCFLine, None, None]:
@@ -64,11 +65,12 @@ class VCFMaker:
         )
 
         # ##contig=<ID=1,length=249250621,assembly=GRCh37>
-        for chrom, length in self.buildsizes.items():
-            yield VCFLine.as_comment_key_dict(
-                "contig",
-                {"ID": chrom, "length": length, "assembly": buildname},
-            )
+        for chrom, rec in self.reference_fasta.faidx.index.items():
+            if self.is_valid_chromosome(chrom):
+                yield VCFLine.as_comment_key_dict(
+                    "contig",
+                    {"ID": chrom, "length": rec.rlen, "assembly": buildname},
+                )
 
     def generate_lines(self, blocks) -> Generator[VCFLine, None, None]:
         column_header = False
@@ -143,8 +145,10 @@ class VCFMaker:
         # force chr prefix
         if not chm.startswith("chr"):
             chm = f"chr{chm}"
-        if chm not in self.buildsizes.keys():
-            raise ConverterError(f"Unexpected chromosome {block[0]['Chr']}:{block[0]['Position']}")
+        if chm not in self.reference_fasta.faidx.index:
+            raise ConverterError(f"Unexpected chromosome {chm}:{block[0]['Position']}")
+        if not self.is_valid_chromosome(chm):
+            raise ConverterError(f"Unexpected chromosome {chm}:{block[0]['Position']}")
         pos = int(block[0]["Position"])
 
         ref = self.ref_lookup(chm, pos)

@@ -4,6 +4,8 @@
 #
 #    pip-compile
 #
+fsspec==2022.5.0
+    # via -r requirements.in
 puretabix==5.0.0
     # via -r requirements.in
 pyfaidx==0.7.0

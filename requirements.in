@@ -1,2 +1,3 @@
 puretabix
 pyfaidx
+fsspec # read and write from s3

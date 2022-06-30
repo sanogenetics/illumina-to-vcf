@@ -2,7 +2,9 @@ import argparse
 import logging
 import sys
 
-from illumina2vcf import Converter
+import fsspec
+
+from . import Converter
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +23,13 @@ if __name__ == "__main__":
     parser.add_argument("--blocklist", default="", help="path to probe name blocklist")
     args = parser.parse_args()
 
-    converter = Converter(args.fasta, args.fasta + ".fai", args.blocklist, args.delim)
+    reference = args.fasta
+    reference_fai = reference + ".fai"
+    if reference.startswith("s3://"):
+        reference = fsspec.open(reference)
+        reference_fai = fsspec.open(reference_fai)
+
+    converter = Converter(reference, reference_fai, args.blocklist, args.delim)
 
     # read from stdin as uncompressed text
     # write to stdout as uncompressed vcf
