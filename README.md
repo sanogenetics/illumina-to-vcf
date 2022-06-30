@@ -46,7 +46,7 @@ Note these steps can be piped together
   unzip -p FinalReport.zip | tail -n+11 \
   | grep -v NA12878 | sort -Vt , -k 9 -k 10 -k 4 -k 5 \
  } | python3 -m illumina2vcf --fasta Homo_sapiens_assembly38.fasta --tab \
-| bcftools sort out.vcf.gz | bcftools view -s ^NA12878 --no-version --no-update -Oz > out.vcf.gz
+| bcftools sort -Oz > out.vcf.gz
 ```
 
 blocklist
@@ -61,30 +61,60 @@ plus 1475 GOLD samples. Plus SNPs that have HWE violations < e-6 in either datas
 There are a number of SNPs that have large allele frequency deviations relative to 1KGP
 but have not (yet) included them in this list.
 
+reference
+---------
+
+To correctly identify the reference allele, illumina2vcf needs to access a reference genome. This must be in
+uncompressed fasta format and have an accompanying .fai index file too.
+
+A build 38 reference file (3GB in size) is available from https://storage.googleapis.com/genomics-public-data/resources/broad/hg38/v0/Homo_sapiens_assembly38.fasta and has been copied to s3://sano-public/Homo_sapiens_assembly38.fasta
+
+S3 access is supported via the [s3fs](http://s3fs.readthedocs.io/en/latest/) library.
+
+Note: uses PyFaidx to read the fasta reference. In theory, this supports a compressed reference. However, to
+do so it decompressess all of a chromosome at a time, and my default does this for every access without
+caching. So for the purposes of illumina2vcf it is much faster to use a decompressed copy directly
+
 development
 ===========
 
 ```sh
-python3 -m venv venv # Create virtual environment
-source venv/bin/activate # Activate virtual environment
-pip install -e '.[dev]'  # Install using pip including development extras
-pre-commit install  # Enable pre-commit hooks
-pre-commit run --all-files  # Run pre-commit hooks without committing
+# Create virtual environment
+python3 -m venv venv
+# Activate virtual environment
+source venv/bin/activate
+
+# Install editable with development extras
+pip install -e '.[dev]'
+# Enable pre-commit hooks
+pre-commit install
+# Run pre-commit hooks without committing
+pre-commit run --all-files
 # Note pre-commit is configured to use:
-# - seed-isort-config to better categorise third party imports
 # - isort to sort imports
 # - black to format code
-pip-compile  # Freeze dependencies
-pytest  # Run tests
-coverage run -m pytest && coverage report -m  # Run tests, print coverage
-mypy .  # Type checking
-pipdeptree  # Print dependencies
+
+# Freeze dependencies
+pip-compile
+# Freeze dev dependencies
+pip-compile requirements-dev.in
+# Install exact requirements
+pip-sync requirements.txt requirements-dev.txt
+# Print dependencies
+pipdeptree
+
+# Run tests
+pytest
+# Run tests, print coverage
+coverage run -m pytest && coverage report -m
+# Type checking
+mypy illumina2vcf
 ```
 
 Global git ignores per https://help.github.com/en/github/using-git/ignoring-files#configuring-ignored-files-for-all-repositories-on-your-computer
 
 For release to PyPI see https://packaging.python.org/tutorials/packaging-projects/
 
-To add a new development dependency, add to `requirements-dev.in` then run `pip-compile requirements.in`
+To add a new development dependency, add to `requirements-dev.in` then run `pip-compile requirements-dev.in`
 
 To add a new dependency, add to `requirements.in` then run `pip-compile`
