@@ -68,16 +68,19 @@ Total Samples	24"""
         # this will currently work for month/day/year and year-month-day
         # (I guess also for month-day-year and year/month/day)
         # TODO use proper datetime parsing
-        date = file_header[2].split(self.delimiter)[-1].lstrip().split(" ")[0]
+        dateline = file_header[2]
+        _,date = dateline.split(self.delimiter, 1)
+        date = date.strip()
+        date,_ = date.split(" ",1)
         date_components = date.replace("/", "-").split("-")
         if len(date_components) != 3:
-            raise DateError(f"Cannot parse Processing date '{date}' from line '{file_header[2]}'")
+            raise DateError(f"Cannot parse Processing date '{date}' from line '{file_header[2]}' - not 3 components")
         if len(date_components[2]) == 4:
             date_components = [date_components[2], date_components[0], date_components[1]]
         elif len(date_components[0]) != 4:
-            raise DateError(f"Cannot parse Processing date '{date}' from line '{file_header[2]}'")
+            raise DateError(f"Cannot parse Processing date '{date}' from line '{file_header[2]}' - not 4 digit year")
         if int(date_components[1]) > 12:
-            raise DateError(f"Cannot parse Processing date '{date}' from line '{file_header[2]}'")
+            raise DateError(f"Cannot parse Processing date '{date}' from line '{file_header[2]}' - not 1-12 month")
         date_components[1] = date_components[1].zfill(2)
         date_components[2] = date_components[2].zfill(2)
         date = "".join(date_components)
