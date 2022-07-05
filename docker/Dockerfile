@@ -13,12 +13,13 @@ RUN curl "https://storage.googleapis.com/genomics-public-data/resources/broad/hg
 # install reference extras
 COPY ref/GSAMD-24v3-0-EA_20034606_A2_blocklist.txt ref/
 
-# install Python
+# install Python & other dependencies
 RUN apt-get update \
   && apt-get install -y \
     python3.9 \
     python3.9-distutils \
-    libcurl4-gnutls-dev
+    libcurl4-gnutls-dev \
+    unzip
 ADD https://bootstrap.pypa.io/get-pip.py get-pip.py
 RUN python3.9 get-pip.py
 
