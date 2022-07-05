@@ -123,14 +123,10 @@ To add a new dependency, add to `requirements.in` then run `pip-compile`
 docker
 ------
 
-
-
 To build this container, use a command like:
 
 ```
-docker build \
-  --rm \
-  --tag illumina2vcf:latest docker/Dockerfile
+docker/build.sh
 ```
 
 Note: `--rm` means to remove intermediate containers after a build. You may want to omit this if developing locally to utilize docker layer caching.
