@@ -70,18 +70,17 @@ class IlluminaReader:
         date_components = date.replace("/", "-").split("-")
         # not three pieces
         if len(date_components) != 3:
-            raise DateError(f"Cannot parse Processing date '{date}' from line '{file_header[2]}'")
-
+            raise DateError(f"Cannot parse Processing date '{date}' from line '{file_header[2]}' - not 3 components")
         if len(date_components[2]) == 4:
             # four digit year at end --- assume m/d/y
             date_components = [date_components[2], date_components[0], date_components[1]]
         elif len(date_components[0]) != 4:
             # four digit year at neither start nor end
-            raise DateError(f"Cannot parse Processing date '{date}' from line '{file_header[2]}'")
+            raise DateError(f"Cannot parse Processing date '{date}' from line '{file_header[2]}' - not 4 digit year")
 
         if int(date_components[1]) > 12:
             # not month in middle
-            raise DateError(f"Cannot parse Processing date '{date}' from line '{file_header[2]}'")
+            raise DateError(f"Cannot parse Processing date '{date}' from line '{file_header[2]}' - not 1-12 month")
         # ensure leading zeros
         date_components[1] = date_components[1].zfill(2)
         date_components[2] = date_components[2].zfill(2)

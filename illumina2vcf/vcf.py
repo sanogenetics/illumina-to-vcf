@@ -3,7 +3,7 @@ import logging
 import re
 from typing import Dict, Generator, Iterable, List, Tuple, Union
 
-from fsspec.core import OpenFiles
+from fsspec.core import OpenFile
 from puretabix.vcf import VCFLine
 from pyfaidx import Fasta
 
@@ -20,12 +20,12 @@ class ConverterError(Exception):
 
 class VCFMaker:
 
-    reference: Union[str, OpenFiles]
-    reference_index: Union[str, OpenFiles]
+    reference: Union[str, OpenFile]
+    reference_index: Union[str, OpenFile]
     reference_fasta: Fasta
     _buildsizes: Dict[str, str] = {}
 
-    def __init__(self, reference: Union[str, OpenFiles], reference_index: Union[str, OpenFiles]) -> None:
+    def __init__(self, reference: Union[str, OpenFile], reference_index: Union[str, OpenFile]) -> None:
         self.reference = reference
         self.reference_index = reference_index
         self.reference_fasta = Fasta(
