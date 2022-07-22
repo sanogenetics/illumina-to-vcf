@@ -84,8 +84,14 @@ python3 -m venv venv
 # Activate virtual environment
 source venv/bin/activate
 
+# first install pip tools
+pip install pip-tools
+# Install exact requirements
+pip-sync requirements.txt requirements-dev.txt
 # Install editable with development extras
 pip install -e '.[dev]'
+
+# before making any commits
 # Enable pre-commit hooks
 pre-commit install
 # Run pre-commit hooks without committing
@@ -94,21 +100,23 @@ pre-commit run --all-files
 # - isort to sort imports
 # - black to format code
 
-# Freeze dependencies
-pip-compile
-# Freeze dev dependencies
-pip-compile requirements-dev.in
-# Install exact requirements
-pip-sync requirements.txt requirements-dev.txt
-# Print dependencies
-pipdeptree
-
+# before making any code changes
 # Run tests
 pytest
 # Run tests, print coverage
 coverage run -m pytest && coverage report -m
 # Type checking
 mypy illumina2vcf
+
+# after making any dependency changes
+# Freeze dependencies
+pip-compile
+# Freeze dev dependencies
+pip-compile requirements-dev.in
+# then run pip-sync again to install them!
+# Print dependencies
+pipdeptree
+
 ```
 
 Global git ignores per https://help.github.com/en/github/using-git/ignoring-files#configuring-ignored-files-for-all-repositories-on-your-computer
