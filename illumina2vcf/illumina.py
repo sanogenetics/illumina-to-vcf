@@ -69,9 +69,9 @@ Total Samples	24"""
         # (I guess also for month-day-year and year/month/day)
         # TODO use proper datetime parsing
         dateline = file_header[2]
-        _,date = dateline.split(self.delimiter, 1)
+        _, date = dateline.split(self.delimiter, 1)
         date = date.strip()
-        date,_ = date.split(" ",1)
+        date, _ = date.split(" ", 1)
         date_components = date.replace("/", "-").split("-")
         if len(date_components) != 3:
             raise DateError(f"Cannot parse Processing date '{date}' from line '{file_header[2]}' - not 3 components")
@@ -93,6 +93,10 @@ Total Samples	24"""
             if block and (block[0][CHR] != row[CHR] or block[0][POSITION] != row[POSITION]):
                 yield block
                 block = []
+            # ignore probes without chr or pos
+            if row[CHR] == 0 or row[POSITION] == 0:
+                logger.debug(f"Ignoring blocked {row[SNP_NAME]}")
+                continue
             # ignore blocked probes
             if row[SNP_NAME] in self.blocklist:
                 logger.debug(f"Ignoring blocked {row[SNP_NAME]}")
