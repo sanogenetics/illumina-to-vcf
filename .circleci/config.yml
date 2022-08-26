@@ -1,0 +1,32 @@
+version: 2.1
+orbs:
+  python: circleci/python@2.0.3
+  codecov: codecov/codecov@3.2.3
+
+jobs:
+  pytest:
+    executor: python/default
+    steps:
+      - checkout
+      - python/install-packages:
+          pip-dependency-file: requirements.txt
+          pkg-manager: pip
+      - python/install-packages:
+          pip-dependency-file: requirements-dev.txt
+          pkg-manager: pip
+      - run:
+          name: Run pre-commit checks again
+          command: |
+            pre-commit install
+            pre-commit run --all-files
+      - run:
+          name: Run tests and coverage report
+          command: |
+            coverage run -m pytest
+            coverage report -m
+      - codecov/upload
+
+workflows:
+  tests:
+    jobs:
+      - pytest
