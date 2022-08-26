@@ -95,6 +95,10 @@ class IlluminaReader:
             if block and (block[0][CHR] != row[CHR] or block[0][POSITION] != row[POSITION]):
                 yield block
                 block = []
+            # ignore probes without chr or pos
+            if row[CHR] == 0 or row[POSITION] == 0:
+                logger.debug(f"Ignoring blocked {row[SNP_NAME]}")
+                continue
             # ignore blocked probes
             if row[SNP_NAME] in self.blocklist:
                 logger.debug(f"Ignoring blocked {row[SNP_NAME]}")
