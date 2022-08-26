@@ -10,10 +10,10 @@ jobs:
       tag: "3.9"
     steps:
       - checkout
-      - python/install-packages:
-          pip-dependency-file: requirements.txt
-      - python/install-packages:
-          pip-dependency-file: requirements-dev.txt
+      - run:
+          name: install
+          command: |
+            pip install .[dev]
       - run:
           name: Run pre-commit checks again
           command: |
