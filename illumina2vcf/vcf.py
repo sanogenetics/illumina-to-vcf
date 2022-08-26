@@ -111,8 +111,8 @@ class VCFMaker:
         )
 
     def _line_block_to_vcf_line(self, block: List[Dict[str, str]], sample_set) -> VCFLine:
-        # if block is silly big skip it (this will fail with >100 samples)
-        if len(block) > 100 or (sample_set and len(block) > 10 * len(sample_set)):
+        # if block is silly big skip it (first block will be included regardless of size)
+        if sample_set and len(block) > 10 * len(sample_set):
             raise ConverterError(f"Oversized block {block[0]['Chr']}:{block[0]['Position']}: {len(block)} rows")
 
         # if we've not got a list of samples yet, get them from this block unfiltered
