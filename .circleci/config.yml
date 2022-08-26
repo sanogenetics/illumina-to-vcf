@@ -31,7 +31,7 @@ jobs:
 
       - store_test_results:
           # must be a directory with named subdirectories
-          path: server/server-test-reports
+          path: server-test-reports
 
       - codecov/upload
 
