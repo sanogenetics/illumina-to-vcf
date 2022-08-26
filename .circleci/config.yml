@@ -11,9 +11,11 @@ jobs:
       - python/install-packages:
           pip-dependency-file: requirements.txt
           pkg-manager: pip
+          version: 3.9
       - python/install-packages:
           pip-dependency-file: requirements-dev.txt
           pkg-manager: pip
+          version: 3.9
       - run:
           name: Run pre-commit checks again
           command: |
