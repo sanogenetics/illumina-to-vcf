@@ -5,7 +5,9 @@ orbs:
 
 jobs:
   pytest:
-    executor: python/default
+    executor:
+      name: python/default
+      tag: "3.9"
     steps:
       - checkout
       - python/install-packages:
@@ -27,6 +29,4 @@ jobs:
 workflows:
   tests:
     jobs:
-      - pytest:
-          version:
-            - 3.9
+      - pytest
