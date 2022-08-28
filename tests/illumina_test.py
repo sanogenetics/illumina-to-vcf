@@ -24,10 +24,14 @@ Total Samples	24"""
         # source must be GSAMD-24v3-0-EA_20034606_A2.bpm
         assert source == "GSAMD-24v3-0-EA_20034606_A2"
 
-    def test_generate_blocks(self):
+    def test_generate_blocks(self, fixture_illumina_lines):
         reader = IlluminaReader("\t")
-        input = """
-        """
-        blocks = tuple(reader.generate_line_blocks(input.splitlines()))
 
-        raise NotImplementedError()
+        date, header_source = reader.parse_header(fixture_illumina_lines)
+
+        blocks = tuple(reader.generate_line_blocks(fixture_illumina_lines))
+        assert len(blocks) > 0
+        for block in blocks:
+            assert len(block) > 0
+
+        # TODO better tests here, better types of block, etc
