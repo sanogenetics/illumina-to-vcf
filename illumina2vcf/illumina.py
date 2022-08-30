@@ -1,6 +1,6 @@
 import csv
 import logging
-from typing import Dict, Generator, Iterable, List, Tuple
+from typing import Dict, FrozenSet, Generator, Iterable, List, Tuple
 
 # header constants
 SAMPLE_ID = "Sample ID"
@@ -23,7 +23,7 @@ class DateError(Exception):
 class IlluminaReader:
     delimiter: str
     blocklist_filename: str
-    _blocklist: frozenset[str] = frozenset()
+    _blocklist: FrozenSet[str] = frozenset()
 
     def __init__(self, delimiter: str, blocklist_filename: str = ""):
         self.delimiter = delimiter
@@ -33,7 +33,7 @@ class IlluminaReader:
         return f"IlluminaReader({repr(self.delimiter)},{repr(self.blocklist_filename)}"
 
     @property
-    def blocklist(self) -> frozenset[str]:
+    def blocklist(self) -> FrozenSet[str]:
         if not self.blocklist_filename:
             return frozenset()
         if not self._blocklist:
@@ -70,17 +70,18 @@ class IlluminaReader:
         date_components = date.replace("/", "-").split("-")
         # not three pieces
         if len(date_components) != 3:
-            raise DateError(f"Cannot parse Processing date '{date}' from line '{file_header[2]}' - not 3 components")
+
+            raise DateError(f"Cannot parse Processing date '{date}' - not 3 components")
         if len(date_components[2]) == 4:
             # four digit year at end --- assume m/d/y
             date_components = [date_components[2], date_components[0], date_components[1]]
         elif len(date_components[0]) != 4:
             # four digit year at neither start nor end
-            raise DateError(f"Cannot parse Processing date '{date}' from line '{file_header[2]}' - not 4 digit year")
+            raise DateError(f"Cannot parse Processing date '{date}' - not 4 digit year")
 
         if int(date_components[1]) > 12:
             # not month in middle
-            raise DateError(f"Cannot parse Processing date '{date}' from line '{file_header[2]}' - not 1-12 month")
+            raise DateError(f"Cannot parse Processing date '{date}' - not 1-12 month")
         # ensure leading zeros
         date_components[1] = date_components[1].zfill(2)
         date_components[2] = date_components[2].zfill(2)
@@ -89,7 +90,7 @@ class IlluminaReader:
         return (date, source)
 
     def generate_line_blocks(self, input: Iterable[str]) -> Generator[List[Dict[str, str]], None, None]:
-        block = []
+        block: List[dict] = []
         for row in csv.DictReader(input, delimiter=self.delimiter):
             # is there an existing block that has ended?
             if block and (block[0][CHR] != row[CHR] or block[0][POSITION] != row[POSITION]):

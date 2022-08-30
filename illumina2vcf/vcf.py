@@ -74,7 +74,7 @@ class VCFMaker:
 
     def generate_lines(self, blocks) -> Generator[VCFLine, None, None]:
         column_header = False
-        samples = []
+        samples = List[str]
         for block in blocks:
             # if we've not got a list of samples yet, get them from this block unfiltered
             if not samples:
@@ -170,21 +170,21 @@ class VCFMaker:
             if allele1 not in "ATCG":
                 allele1n = "."
             elif allele1 == ref:
-                allele1n = 0
+                allele1n = "0"
             elif allele1 not in alt:
                 raise ConverterError(f"Unexpected forward {block[0]['Chr']}:{block[0]['Position']}")
             else:
-                allele1n = 1 + alt.index(allele1)
+                allele1n = str(1 + alt.index(allele1))
 
             allele2 = calls[sampleid][1]
             if allele2 not in "ATCG":
                 allele2n = "."
             elif allele2 == ref:
-                allele2n = 0
+                allele2n = "0"
             elif allele2 not in alt:
                 raise ConverterError(f"Unexpected forward {block[0]['Chr']}:{block[0]['Position']}")
             else:
-                allele2n = 1 + alt.index(allele2)
+                allele2n = str(1 + alt.index(allele2))
 
             assert sampleid not in converted_calls
             converted_calls[sampleid] = f"{allele1n}/{allele2n}"
@@ -212,7 +212,7 @@ class VCFMaker:
             # exclude indel probes
             if new_probes[0] not in "ATCG" or new_probes[1] not in "ATCG":
                 raise ConverterError(f"Not a SNV probe {row['Chr']}:{row['Position']}")
-            if strand == "-":
+                # if strand == "-":
                 new_probes = tuple((STRANDSWAP[probe] for probe in new_probes))
             new_calls = (row[ALLELE1], row[ALLELE2])
 
@@ -225,7 +225,7 @@ class VCFMaker:
                 # need to reconcile multiple calls
                 try:
                     calls[sampleid] = self._combine_calls(
-                        calls[sampleid], new_calls, combined_probes[sampleid], new_probes
+                        calls[sampleid], new_calls, tuple(combined_probes[sampleid]), new_probes
                     )
                 except ConverterError as e:
                     conflicts.append(sampleid)
@@ -243,8 +243,8 @@ class VCFMaker:
         self,
         previous_calls: Tuple[str, str],
         new_calls: Tuple[str, str],
-        previous_probes: Tuple[str, str],
-        new_probes: Tuple[str, str],
+        previous_probes: Tuple[str, ...],
+        new_probes: Tuple[str, ...],
     ):
         if previous_calls == new_calls or previous_calls == new_calls[::-1] or new_calls == ("-", "-"):
             return previous_calls
