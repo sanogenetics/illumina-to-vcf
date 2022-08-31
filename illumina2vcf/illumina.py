@@ -1,6 +1,6 @@
 import csv
 import logging
-from typing import Dict, Generator, List, Tuple
+from typing import Dict, FrozenSet, Generator, Iterable, List, Tuple
 
 # header constants
 SAMPLE_ID = "Sample ID"
@@ -23,14 +23,17 @@ class DateError(Exception):
 class IlluminaReader:
     delimiter: str
     blocklist_filename: str
-    _blocklist: frozenset[str] = frozenset()
+    _blocklist: FrozenSet[str] = frozenset()
 
     def __init__(self, delimiter: str, blocklist_filename: str = ""):
         self.delimiter = delimiter
         self.blocklist_filename = blocklist_filename
 
+    def __repr__(self) -> str:
+        return f"IlluminaReader({repr(self.delimiter)},{repr(self.blocklist_filename)}"
+
     @property
-    def blocklist(self) -> frozenset[str]:
+    def blocklist(self) -> FrozenSet[str]:
         if not self.blocklist_filename:
             return frozenset()
         if not self._blocklist:
@@ -41,53 +44,53 @@ class IlluminaReader:
             self._blocklist = frozenset(blocklist)
         return self._blocklist
 
-    def parse_header(self, source) -> Tuple[str, str]:
-        file_header = []
-        # read from source
-        for line in source:
+    def parse_header(self, header: Iterable[str]) -> Tuple[str, str]:
+        file_header = {}
+        # turn header lines into key/value
+        for line in header:
             line = line.strip()
+            if line == "[Header]":
+                continue
             if line == "[Data]":
                 break
-            file_header.append(line)
+            assert self.delimiter in line, f"'{self.delimiter}' not in '{line}'"
+            key, value = line.split(self.delimiter, 1)
+            file_header[key] = value
             # safety valve
             assert len(file_header) < 100
 
-        """[Header]
-GSGT Version	2.0.4
-Processing Date	2022-06-02 9:25 AM
-Content		GSAMD-24v3-0-EA_20034606_A2.bpm
-Num SNPs	730059
-Total SNPs	730059
-Num Samples	24
-Total Samples	24"""
-
-        source = file_header[3].split(self.delimiter)[-1].split(".")[0].lstrip()
+        source = file_header["Content"].split(".", 1)[0][1:].strip()  # remove trailing .pbm and leading sep char
 
         # need some validation on the dates here because there's a good chance they
         # will switch up the format on us at some point
         # this will currently work for month/day/year and year-month-day
         # (I guess also for month-day-year and year/month/day)
         # TODO use proper datetime parsing
-        dateline = file_header[2]
-        _, date = dateline.split(self.delimiter, 1)
-        date = date.strip()
-        date, _ = date.split(" ", 1)
+        date = file_header["Processing Date"].strip().split(" ")[0]
         date_components = date.replace("/", "-").split("-")
+        # not three pieces
         if len(date_components) != 3:
-            raise DateError(f"Cannot parse Processing date '{date}' from line '{file_header[2]}' - not 3 components")
+
+            raise DateError(f"Cannot parse Processing date '{date}' - not 3 components")
         if len(date_components[2]) == 4:
+            # four digit year at end --- assume m/d/y
             date_components = [date_components[2], date_components[0], date_components[1]]
         elif len(date_components[0]) != 4:
-            raise DateError(f"Cannot parse Processing date '{date}' from line '{file_header[2]}' - not 4 digit year")
+            # four digit year at neither start nor end
+            raise DateError(f"Cannot parse Processing date '{date}' - not 4 digit year")
+
         if int(date_components[1]) > 12:
-            raise DateError(f"Cannot parse Processing date '{date}' from line '{file_header[2]}' - not 1-12 month")
+            # not month in middle
+            raise DateError(f"Cannot parse Processing date '{date}' - not 1-12 month")
+        # ensure leading zeros
         date_components[1] = date_components[1].zfill(2)
         date_components[2] = date_components[2].zfill(2)
+
         date = "".join(date_components)
         return (date, source)
 
-    def generate_line_blocks(self, input) -> Generator[List[Dict[str, str]], None, None]:
-        block = []
+    def generate_line_blocks(self, input: Iterable[str]) -> Generator[List[Dict[str, str]], None, None]:
+        block: List[dict] = []
         for row in csv.DictReader(input, delimiter=self.delimiter):
             # is there an existing block that has ended?
             if block and (block[0][CHR] != row[CHR] or block[0][POSITION] != row[POSITION]):

@@ -1,0 +1,41 @@
+version: 2.1
+orbs:
+  codecov: codecov/codecov@3.2.3
+
+jobs:
+  pytest:
+    docker:
+      # specify the version you desire here
+      - image: cimg/python:3.9
+        auth:
+          username: $DOCKERHUB_USERNAME # context environment variable reference
+          password: $DOCKERHUB_PASSWORD # context environment variable reference
+    steps:
+      - checkout
+      - run:
+          name: install
+          command: |
+            pip install .[dev]
+      - run:
+          name: Run pre-commit checks again
+          command: |
+            pre-commit install
+            pre-commit run --all-files
+      - run:
+          name: Run tests
+          command: |
+            mkdir -p server-test-reports/pytest
+            # --cov --cov-report xml:server-test-reports/coverage.xml  = report test coverage to a file
+            # --junitxml server-test-reports/pytest/tests.xml  = output also in XML to a file (for CircleCI to parse)
+            pytest tests/ -s --cov --cov-report xml:server-test-reports/coverage.xml --junitxml server-test-reports/pytest/tests.xml --log-cli-level ERROR
+
+      - store_test_results:
+          # must be a directory with named subdirectories
+          path: server-test-reports
+
+      - codecov/upload
+
+workflows:
+  tests:
+    jobs:
+      - pytest
