@@ -8,15 +8,13 @@ set -u
 
 # first have to sort the input rows
 # by sample, chromosome, then position _numerically_ i.e. 1,2,10
-# do conversion, then sort again (not needed?)
+# do conversion, then sort again 
 # generate tabix index of output
 
 # use funzip to stream unzip without needing the file list at end of zip archive
-# replace commas to tab incase of comma separated input
 # sort by chromosome, position, probe num, samplenum
 { aws s3 cp $1 - | funzip | head; \
   aws s3 cp $1 - | funzip | tail -n+11 \
-  | sed 's/\,/\t/g' \
   | sort -V -k9,10 -k4,5
 } | python3.9 -m illumina2vcf ${@:3} | bcftools sort -Oz | aws s3 cp - $2
 
