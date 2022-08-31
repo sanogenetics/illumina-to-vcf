@@ -36,6 +36,7 @@ COPY requirements-dev.txt .
 RUN pip install .
 
 # add the wrapper script
+ENV AWS_CLI_ARGS=
 COPY docker/run.sh .
 
 CMD ["sh", "run.sh"]
