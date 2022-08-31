@@ -6,3 +6,4 @@ data/
 .DS_Store
 *.egg-info
 **__pycache__
+.vscode
