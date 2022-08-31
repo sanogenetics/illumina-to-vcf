@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+set -x
 set -u
 
 # arg 1 is the input s3 url
@@ -14,10 +15,10 @@ set -u
 # use funzip to stream unzip without needing the file list at end of zip archive
 # replace commas to tab incase of comma separated input
 # sort by chromosome, position, probe num, samplenum
-{ aws s3 ${AWS_CLI_ARGS} cp $1 - | funzip | head; \
-  aws s3 ${AWS_CLI_ARGS} cp $1 - | funzip | tail -n+11 \
+{ aws ${AWS_CLI_ARGS} s3 cp $1 - | funzip | head; \
+  aws ${AWS_CLI_ARGS} s3 cp $1 - | funzip | tail -n+11 \
   | sed 's/\,/\t/g' \
   | sort -V -k9,10 -k4,5
-} | python3.9 -m illumina2vcf ${@:3} | bcftools sort -Oz | aws s3 cp - $2
+} | python3.9 -m illumina2vcf ${@:3} | bcftools sort -Oz | aws ${AWS_CLI_ARGS} s3 cp - $2
 
 s3role tabix $2
