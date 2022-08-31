@@ -24,7 +24,7 @@ class IlluminaBuilder:
         rng = random.Random(seed)
         # human is about 3 billion over 23 chromosome
         # we can simplify a bit, 8 chromosomes and 80m bases
-        chroms = ["1","2","11","X", "Y", "MT"]
+        chroms = ["1", "2", "11", "X", "Y", "MT"]
         for chrom in chroms:
             pos = 10000  # minimum position on a chromosome
             while pos < 10000000:

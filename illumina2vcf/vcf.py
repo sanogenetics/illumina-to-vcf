@@ -7,7 +7,7 @@ from fsspec.core import OpenFile
 from puretabix.vcf import VCFLine
 from pyfaidx import Fasta
 
-from .illumina import ALLELE1, ALLELE2, SAMPLE_ID, SNP_NAME, STRAND,SNP
+from .illumina import ALLELE1, ALLELE2, SAMPLE_ID, SNP, SNP_NAME, STRAND
 
 STRANDSWAP = {"A": "T", "T": "A", "C": "G", "G": "C"}
 
@@ -208,11 +208,11 @@ class VCFMaker:
             strand = row[STRAND]
 
             probes = row[SNP]
-            match = re.match(r"\[([ATCGID]+)\/([ATCGID]+)\]",probes)
+            match = re.match(r"\[([ATCGID]+)\/([ATCGID]+)\]", probes)
             if not match:
                 raise ConverterError(f"Unexpcted probes {row['Chr']}:{row['Position']} {probes}")
 
-            new_probes = match.group(1,2)
+            new_probes = match.group(1, 2)
             # exclude indel probes
             if new_probes[0] not in "ATCG" or new_probes[1] not in "ATCG":
                 raise ConverterError(f"Not a SNV probe {row['Chr']}:{row['Position']} {probes}")
