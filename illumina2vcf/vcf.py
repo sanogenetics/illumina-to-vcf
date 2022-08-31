@@ -7,7 +7,7 @@ from fsspec.core import OpenFile
 from puretabix.vcf import VCFLine
 from pyfaidx import Fasta
 
-from .illumina import ALLELE1, ALLELE2, SAMPLE_ID, SNP_NAME, STRAND
+from .illumina import ALLELE1, ALLELE2, SAMPLE_ID, SNP_NAME, STRAND,SNP
 
 STRANDSWAP = {"A": "T", "T": "A", "C": "G", "G": "C"}
 
@@ -74,7 +74,7 @@ class VCFMaker:
 
     def generate_lines(self, blocks) -> Generator[VCFLine, None, None]:
         column_header = False
-        samples = List[str]
+        samples: List[str] = []
         for block in blocks:
             # if we've not got a list of samples yet, get them from this block unfiltered
             if not samples:
@@ -196,7 +196,6 @@ class VCFMaker:
             samples.append({"GT": converted_calls.get(sampleid, "./.")})
 
         vcfline = VCFLine("", "", "", {}, chm, pos, snp_names, ref, alt, ".", ["PASS"], {}, samples)
-        # vcfline = self.clean_vcf_line(vcfline)
 
         return vcfline
 
@@ -208,12 +207,20 @@ class VCFMaker:
             sampleid = row[SAMPLE_ID]
             strand = row[STRAND]
 
-            new_probes = tuple(row["SNP"][1:-1].split("/"))
+            probes = row[SNP]
+            match = re.match(r"\[([ATCGID]+)\/([ATCGID]+)\]",probes)
+            if not match:
+                raise ConverterError(f"Unexpcted probes {row['Chr']}:{row['Position']} {probes}")
+
+            new_probes = match.group(1,2)
             # exclude indel probes
             if new_probes[0] not in "ATCG" or new_probes[1] not in "ATCG":
-                raise ConverterError(f"Not a SNV probe {row['Chr']}:{row['Position']}")
-                # if strand == "-":
+                raise ConverterError(f"Not a SNV probe {row['Chr']}:{row['Position']} {probes}")
+
+            # swap strand if needed
+            if strand == "-":
                 new_probes = tuple((STRANDSWAP[probe] for probe in new_probes))
+
             new_calls = (row[ALLELE1], row[ALLELE2])
 
             if sampleid not in calls:
