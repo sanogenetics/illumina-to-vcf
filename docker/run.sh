@@ -14,7 +14,7 @@ set -u
 
 # first have to sort the input rows
 # by sample, chromosome, then position _numerically_ i.e. 1,2,10
-# do conversion, then sort again 
+# do conversion, then sort again
 # generate tabix index of output
 
 # use funzip to stream unzip without needing the file list at end of zip archive
