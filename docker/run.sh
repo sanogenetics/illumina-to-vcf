@@ -18,7 +18,6 @@ set -u
 # generate tabix index of output
 
 # use funzip to stream unzip without needing the file list at end of zip archive
-# replace commas to tab incase of comma separated input
 # sort by chromosome, position, probe num, samplenum
 { aws ${AWS_CLI_ARGS} s3 cp $1 - | funzip | head; \
   aws ${AWS_CLI_ARGS} s3 cp $1 - | funzip | tail -n+11 \
