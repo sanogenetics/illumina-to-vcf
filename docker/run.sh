@@ -22,6 +22,7 @@ set -u
 # sort by chromosome, position, probe num, samplenum
 { aws ${AWS_CLI_ARGS} s3 cp $1 - | funzip | head; \
   aws ${AWS_CLI_ARGS} s3 cp $1 - | funzip | tail -n+11 \
+  | sort -V -k9,10 -k4,5
 } | python3.9 -m illumina2vcf ${@:3} | bcftools sort -Oz | aws ${AWS_CLI_ARGS} s3 cp - $2
 
 s3role tabix $2
