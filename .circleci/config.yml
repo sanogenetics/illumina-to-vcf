@@ -10,6 +10,9 @@ jobs:
         auth:
           username: $DOCKERHUB_USERNAME # context environment variable reference
           password: $DOCKERHUB_PASSWORD # context environment variable reference
+    # 1vCPU & 2GB = small is too small
+    # 2vCPU & 4GB = medium
+    resource_class: medium
     steps:
       - checkout
       - run:
@@ -34,6 +37,24 @@ jobs:
           path: server-test-reports
 
       - codecov/upload
+
+      - when:
+          condition:
+            equal: [ "feature/circleci-docker-build", << pipeline.git.branch >> ] # change to master before merging to master!
+          steps:
+            - setup_remote_docker:
+                version: 20.10.14
+                docker_layer_caching: true
+            - run: docker/build.sh
+            - run: |
+                echo $DOCKERHUB_PASSWORD | docker login --username $DOCKERHUB_USERNAME --password-stdin
+                docker tag illumina2vcf:latest sanogenetics/illumina2vcf:latest
+                docker push sanogenetics/illumina2vcf:latest
+                docker tag illumina2vcf:latest-ref sanogenetics/illumina2vcf:latest-ref
+                docker push sanogenetics/illumina2vcf:latest-ref
+                docker logout
+
+
 
 workflows:
   tests:
