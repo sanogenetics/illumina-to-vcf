@@ -48,9 +48,7 @@ jobs:
             - run: docker/build.sh
             - run: |
                 echo $DOCKERHUB_PASSWORD | docker login --username $DOCKERHUB_USERNAME --password-stdin
-                docker tag illumina2vcf:latest sanogenetics/illumina2vcf:latest
                 docker push sanogenetics/illumina2vcf:latest
-                docker tag illumina2vcf:latest-ref sanogenetics/illumina2vcf:latest-ref
                 docker push sanogenetics/illumina2vcf:latest-ref
                 docker logout
 
