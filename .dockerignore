@@ -16,3 +16,4 @@ venv
 *.zip
 ref/Homo_sapiens_assembly38.fasta
 ref/Homo_sapiens_assembly38.fasta.fai
+tmp
