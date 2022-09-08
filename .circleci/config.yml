@@ -47,7 +47,7 @@ jobs:
                 docker_layer_caching: true
             - run: docker/build.sh
             - run: |
-                echo $DOCKERHUB_PASSWORD | docker login --username $DOCKERHUB_USERNAME --password-stdin
+                docker login --username $DOCKERHUB_USERNAME --password $DOCKERHUB_PASSWORD
                 docker push sanogenetics/illumina2vcf:latest
                 docker push sanogenetics/illumina2vcf:latest-ref
                 docker logout
