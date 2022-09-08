@@ -49,8 +49,7 @@ jobs:
                 name: Build & push to Dockerhub
                 command: |
                   docker/build.sh
-                  echo $DOCKERHUB_USERNAME
-                  docker login --username $DOCKERHUB_USERNAME --password $DOCKERHUB_PASSWORD
+                  docker login --username $DOCKERHUB_TOKEN
                   docker push sanogenetics/illumina2vcf:latest
                   docker push sanogenetics/illumina2vcf:latest-ref
                   docker logout
