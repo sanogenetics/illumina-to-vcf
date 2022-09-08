@@ -40,7 +40,7 @@ jobs:
 
       - when:
           condition:
-            equal: [ "feature/circleci-docker-build", << pipeline.git.branch >> ] # change to master before merging to master!
+            equal: [ "master", << pipeline.git.branch >> ]
           steps:
             - setup_remote_docker:
                 version: 20.10.14
