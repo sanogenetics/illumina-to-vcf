@@ -46,13 +46,17 @@ jobs:
                 version: 20.10.14
                 docker_layer_caching: true
             - run:
-                name: Build & push to Dockerhub
+                name: Build Docker images
                 command: |
                   docker/build.sh
+            - run:
+                name: Push to Dockerhub
+                command: |
                   docker logout
                   docker login --username sanogenetics --password $DOCKERHUB_PASSWORD
                   docker push sanogenetics/illumina2vcf:latest
                   docker push sanogenetics/illumina2vcf:latest-ref
+                  docker push sanogenetics/illumina2vcf:latest-test-ref
                   docker logout
 
 
