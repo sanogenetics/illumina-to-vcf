@@ -54,8 +54,11 @@ jobs:
                 command: |
                   docker logout
                   docker login --username sanogenetics --password $DOCKERHUB_PASSWORD
+                  docker tag illumina2vcf:latest sanogenetics/illumina2vcf:latest
                   docker push sanogenetics/illumina2vcf:latest
+                  docker tag illumina2vcf:latest sanogenetics/illumina2vcf:latest
                   docker push sanogenetics/illumina2vcf:latest-ref
+                  docker tag illumina2vcf:latest sanogenetics/illumina2vcf:latest
                   docker push sanogenetics/illumina2vcf:latest-test-ref
                   docker logout
 
