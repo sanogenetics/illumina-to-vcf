@@ -10,6 +10,9 @@ jobs:
         auth:
           username: $DOCKERHUB_USERNAME # context environment variable reference
           password: $DOCKERHUB_PASSWORD # context environment variable reference
+    # 1vCPU & 2GB = small is too small
+    # 2vCPU & 4GB = medium
+    resource_class: medium
     steps:
       - checkout
       - run:
@@ -35,7 +38,35 @@ jobs:
 
       - codecov/upload
 
+      - when:
+          condition:
+            equal: [ "master", << pipeline.git.branch >> ]
+          steps:
+            - setup_remote_docker:
+                version: 20.10.14
+                docker_layer_caching: true
+            - run:
+                name: Build Docker images
+                command: |
+                  docker/build.sh
+            - run:
+                name: Push to Dockerhub
+                command: |
+                  docker logout
+                  docker login --username sanogenetics --password $DOCKERHUB_PASSWORD
+                  docker tag illumina2vcf:latest sanogenetics/illumina2vcf:latest
+                  docker push sanogenetics/illumina2vcf:latest
+                  docker tag illumina2vcf:latest sanogenetics/illumina2vcf:latest
+                  docker push sanogenetics/illumina2vcf:latest-ref
+                  docker tag illumina2vcf:latest sanogenetics/illumina2vcf:latest
+                  docker push sanogenetics/illumina2vcf:latest-test-ref
+                  docker logout
+
+
+
 workflows:
   tests:
     jobs:
-      - pytest
+      - pytest:
+          context:
+            - "docker_hub_creds"

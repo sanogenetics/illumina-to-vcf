@@ -67,13 +67,19 @@ reference
 To correctly identify the reference allele, illumina2vcf needs to access a reference genome. This must be in
 uncompressed fasta format and have an accompanying .fai index file too.
 
-A build 38 reference file (3GB in size) is available from https://storage.googleapis.com/genomics-public-data/resources/broad/hg38/v0/Homo_sapiens_assembly38.fasta and has been copied to s3://sano-public/Homo_sapiens_assembly38.fasta
+A build 38 reference file (3GB in size) is available from https://storage.googleapis.com/genomics-public-data/resources/broad/hg38/v0/Homo_sapiens_assembly38.fasta and has been copied to s3://sano-public/Homo_sapiens_assembly38.fasta in the `latest-ref` tagged container.
+
+For testing, the full reference is too large (~3GB). So there is an alternative that uses a subset of the reference tagged `latest-test-ref` that is ~5MB and limited to:
+ - chr1,2,10 1MB for chromosome ordering and autosomal testing
+ - chrX,Y 3MB for sex chromosome and PAR testing
+ - chrM for mitochondial chromosome testing
+
 
 S3 access is supported via the [s3fs](http://s3fs.readthedocs.io/en/latest/) library.
 
 Note: uses PyFaidx to read the fasta reference. In theory, this supports a compressed reference. However, to
 do so it decompressess all of a chromosome at a time, and my default does this for every access without
-caching. So for the purposes of illumina2vcf it is much faster to use a decompressed copy directly
+caching. So for the purposes of illumina2vcf it is much faster to use a decompressed copy directly.
 
 development
 ===========
