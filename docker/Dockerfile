@@ -1,5 +1,5 @@
 # use base image that already has AWS CLI & HTSLIB+SAMTools+VCFTools
-FROM sanogenetics/htslib-bcftools-samtools:1.15.1
+FROM sanogenetics/htslib-bcftools-samtools:latest
 
 WORKDIR /app
 # install Python & other dependencies
