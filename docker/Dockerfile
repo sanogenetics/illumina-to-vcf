@@ -7,7 +7,6 @@ RUN apt-get update \
   && apt-get install -y \
     python3.9 \
     python3.9-distutils \
-    libcurl4-gnutls-dev \
     unzip
 ADD https://bootstrap.pypa.io/get-pip.py get-pip.py
 RUN python3.9 get-pip.py
