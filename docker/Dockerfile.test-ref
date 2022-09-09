@@ -10,7 +10,7 @@ WORKDIR /app
 # useful for downstream testing purposes
 # Docker ADD always downloads to verify cache
 RUN mkdir ref
-RUN apt-get install -y libssl-dev
+RUN apt-get update && apt-get install -y libssl-dev
 RUN samtools faidx -o ref/Homo_sapiens_assembly38.fasta \
   'https://storage.googleapis.com/genomics-public-data/resources/broad/hg38/v0/Homo_sapiens_assembly38.fasta' \
   chr1:0-1000000 \
