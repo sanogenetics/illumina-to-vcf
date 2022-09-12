@@ -17,11 +17,24 @@ set -u
 # do conversion, then sort again
 # generate tabix index of output
 
-# use funzip to stream unzip without needing the file list at end of zip archive
+# check compression via filename
+if [[ $1 = *.zip ]]
+then
+  # use funzip to stream unzip without needing the file list at end of zip archive
+  DECOMPRESSOR=funzip
+elif [[ $1 = *.gz ]]
+then
+  DECOMPRESSOR=gunzip
+else
+  echo "Unrecognized file ending $1"
+  exit 1
+fi
+
 # sort by chromosome, position, probe num, samplenum
-{ aws ${AWS_CLI_ARGS} s3 cp $1 - | funzip | head; \
-  aws ${AWS_CLI_ARGS} s3 cp $1 - | funzip | tail -n+11 \
-  | sort -V -k9,10 -k4,5
-} | python3.9 -m illumina2vcf ${@:3} | bcftools sort -Oz | aws ${AWS_CLI_ARGS} s3 cp - $2
+{
+  aws $AWS_CLI_ARGS s3 cp $1 - | $DECOMPRESSOR | head
+  aws $AWS_CLI_ARGS s3 cp $1 - | $DECOMPRESSOR | tail -n+11 |
+    sort -V -k9,10 -k4,5
+} | python3.9 -m illumina2vcf ${@:3} | bcftools sort -Oz | aws $AWS_CLI_ARGS s3 cp - $2
 
 s3role tabix $2
