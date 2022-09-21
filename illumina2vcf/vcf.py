@@ -153,41 +153,57 @@ class VCFMaker:
 
         ref = self.ref_lookup(chm, pos)
 
-        # hande ref/alt split
-        if ref not in probed:
-            raise ConverterError(
-                f"{';'.join(snp_names)}: Reference ({ref}) not probed ({','.join(probed)}) {block[0]['Chr']}:{block[0]['Position']}"
-            )
-        probed.remove(ref)
+        # handel indels
+        if "I" in probed or "D" in probed:
+            if probed.intersection({"A", "C", "G", "T"}):
+                raise ConverterError(
+                    f"{';'.join(snp_names)}: contains indels and SNPs ({','.join(probed)}) {block[0]['Chr']}:{block[0]['Position']}"
+                )
+            try:
+                record = indel_records[chm][pos]
+                (ref, alt) = get_record_for_indel(record, ref)
+            except KeyError:
+                raise ConverterError(
+                    f"{';'.join(snp_names)}: No BPM record ({','.join(probed)}) {block[0]['Chr']}:{block[0]['Position']}"
+                )
+            for sampleid in calls:
+                converted_calls[sampleid] = self.convert_indel_genotype_to_vcf(probed, record.is_deletion)
+        else:
+            # handle ref/alt split
+            if ref not in probed:
+                raise ConverterError(
+                    f"{';'.join(snp_names)}: Reference ({ref}) not probed ({','.join(probed)}) {block[0]['Chr']}:{block[0]['Position']}"
+                )
+            probed.remove(ref)
 
-        # alt may not be used, but is what the microarray could check for
-        alt = tuple(sorted(probed))
+            # alt may not be used, but is what the microarray could check for
+            alt = tuple(sorted(probed))
 
-        # convert calls
-        converted_calls = {}
-        for sampleid in calls:
-            allele1 = calls[sampleid][0]
-            if allele1 not in "ATCG":
-                allele1n = "."
-            elif allele1 == ref:
-                allele1n = "0"
-            elif allele1 not in alt:
-                raise ConverterError(f"Unexpected forward {block[0]['Chr']}:{block[0]['Position']}")
-            else:
-                allele1n = str(1 + alt.index(allele1))
+            # convert calls
+            converted_calls = {}
+            for sampleid in calls:
+                allele1 = calls[sampleid][0]
+                if allele1 not in "ATCG":
+                    allele1n = "."
+                elif allele1 == ref:
+                    allele1n = "0"
+                elif allele1 not in alt:
+                    raise ConverterError(f"Unexpected forward {block[0]['Chr']}:{block[0]['Position']}")
+                else:
+                    allele1n = str(1 + alt.index(allele1))
 
-            allele2 = calls[sampleid][1]
-            if allele2 not in "ATCG":
-                allele2n = "."
-            elif allele2 == ref:
-                allele2n = "0"
-            elif allele2 not in alt:
-                raise ConverterError(f"Unexpected forward {block[0]['Chr']}:{block[0]['Position']}")
-            else:
-                allele2n = str(1 + alt.index(allele2))
+                allele2 = calls[sampleid][1]
+                if allele2 not in "ATCG":
+                    allele2n = "."
+                elif allele2 == ref:
+                    allele2n = "0"
+                elif allele2 not in alt:
+                    raise ConverterError(f"Unexpected forward {block[0]['Chr']}:{block[0]['Position']}")
+                else:
+                    allele2n = str(1 + alt.index(allele2))
 
-            assert sampleid not in converted_calls
-            converted_calls[sampleid] = f"{allele1n}/{allele2n}"
+                assert sampleid not in converted_calls
+                converted_calls[sampleid] = self.format_vcf_genotype(allele1n, allele2n)
 
         # always need to have all samples on all rows
         # even if that samples has been filtered out e.g. conflicting probes
@@ -198,6 +214,46 @@ class VCFMaker:
         vcfline = VCFLine("", "", "", {}, chm, pos, snp_names, ref, alt, ".", ["PASS"], {}, samples)
 
         return vcfline
+
+    def format_vcf_genotype(self, vcf_allele1_char, vcf_allele2_char):
+        """
+        Create a VCF representation of the genotype based on alleles. Format appropriately if haploid.
+        Args:
+            vcf_allele1_char (string): 0,1,2 etc.
+            vcf_allele2_char (string): 0,1,2, etc.
+        Returns
+            string: String representation of genotype (e.g., "0/1")
+        """
+
+        vcf_genotype = ""
+        if vcf_allele2_char < vcf_allele1_char:
+            vcf_genotype = str(vcf_allele2_char) + "/" + str(vcf_allele1_char)
+        else:
+            vcf_genotype = str(vcf_allele1_char) + "/" + str(vcf_allele2_char)
+        return vcf_genotype
+
+    def convert_indel_genotype_to_vcf(self, nucleotide_genotypes, is_deletion):
+        """
+        For indel, convert indel SNP genotype (e.g., I/D) into VCF genotype (e.g, 0/1)
+        Args:
+            nucleotide_genotypes (string,string): SNP genotype from manifest (e.g., ('D', 'I'))
+            is_deletion (bool): Whether the BPM record that produced the nucleotide genotypes is a reference deletion
+        Returns:
+            string: VCF genotype (e.g, "0/1")
+        """
+        if not nucleotide_genotypes:
+            return format_vcf_genotype(".", ".")
+
+        if is_deletion:
+            vcf_allele1_char = "0" if nucleotide_genotypes[0] == "I" else "1"
+            vcf_allele2_char = "0" if nucleotide_genotypes[1] == "I" else "1"
+        else:
+            vcf_allele1_char = "1" if nucleotide_genotypes[0] == "I" else "0"
+            vcf_allele2_char = "1" if nucleotide_genotypes[1] == "I" else "0"
+
+        vcf_genotype = format_vcf_genotype(vcf_allele1_char, vcf_allele2_char, ploidy)
+
+        return vcf_genotype
 
     def _simplify_block(self, block: List[Dict[str, str]]) -> Tuple[Dict[str, Tuple[str, str]], set]:
         combined_probes = {}
@@ -214,8 +270,8 @@ class VCFMaker:
 
             new_probes = match.group(1, 2)
             # exclude indel probes
-            if new_probes[0] not in "ATCG" or new_probes[1] not in "ATCG":
-                raise ConverterError(f"Not a SNV probe {row['Chr']}:{row['Position']} {probes}")
+            # if new_probes[0] not in "ATCG" or new_probes[1] not in "ATCG":
+            #    raise ConverterError(f"Not a SNV probe {row['Chr']}:{row['Position']} {probes}")
 
             # swap strand if needed
             if strand == "-":
