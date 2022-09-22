@@ -4,6 +4,7 @@ from typing import Union
 from fsspec.core import OpenFiles
 
 from .illumina import IlluminaReader
+from .ReferenceGenome import ReferenceGenome
 from .vcf import VCFMaker
 
 logger = logging.getLogger(__name__)
@@ -31,7 +32,8 @@ class Converter:
 
     def convert(self, source, destination) -> None:
         reader = IlluminaReader(self.delimiter, self.blocklist_filename)
-        vcfgenerator = VCFMaker(self.reference, self.reference_index)
+        genome_reader = ReferenceGenome(self.reference, self.reference_index)
+        vcfgenerator = VCFMaker(genome_reader)
         # read source header
         date, header_source = reader.parse_header(source)
         # write header

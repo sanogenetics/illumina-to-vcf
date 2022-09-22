@@ -25,24 +25,12 @@ class VCFMaker:
     reference_fasta: Fasta
     _buildsizes: Dict[str, str] = {}
 
-    def __init__(self, reference: Union[str, OpenFile], reference_index: Union[str, OpenFile]) -> None:
-        self.reference = reference
-        self.reference_index = reference_index
-        self.reference_fasta = Fasta(
-            reference,
-            reference_index,
-            read_ahead=1024 * 16,  # 16kb read ahead buffer
-        )
+    def __init__(self, genome_reader) -> None:
+        self._genome_reader = genome_reader
 
     @staticmethod
     def is_valid_chromosome(chrom: str):
         return re.match(r"^chr[1-9XYM][0-9]?$", chrom)
-
-    def ref_lookup(self, chm: str, pos: int) -> str:
-        # VCF is 1-based
-        # FASTA is 0-based
-        ref_base = str(self.reference_fasta[chm][pos - 1])
-        return ref_base
 
     def generate_header(self, date: str, source: str, buildname: str) -> Generator[VCFLine, None, None]:
         # write header
@@ -151,7 +139,7 @@ class VCFMaker:
             raise ConverterError(f"Unexpected chromosome {chm}:{block[0]['Position']}")
         pos = int(block[0]["Position"])
 
-        ref = self.ref_lookup(chm, pos)
+        ref = self._genome_reader.get_reference_bases(chm, pos, pos + 1)
 
         # handel indels
         if "I" in probed or "D" in probed:
