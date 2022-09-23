@@ -20,6 +20,7 @@ if __name__ == "__main__":
         "--comma", "-c", action="store_const", const=",", dest="delim", help="comma as delimitor in source"
     )
     parser.add_argument("--blocklist", default="", help="path to probe name blocklist")
+    parser.add_argument("--manifest", default="", help="path to Bead Pool Manifest file (csv format)")
     args = parser.parse_args()
 
     reference = args.fasta
@@ -28,7 +29,7 @@ if __name__ == "__main__":
         reference = fsspec.open(reference)
         reference_fai = fsspec.open(reference_fai)
 
-    converter = Converter(reference, reference_fai, args.blocklist, args.delim)
+    converter = Converter(reference, reference_fai, args.blocklist, args.manifest, args.delim)
 
     # read from stdin as uncompressed text
     # write to stdout as uncompressed vcf
