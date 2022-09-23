@@ -17,8 +17,14 @@ class Probe:
 
 
 class IlluminaBuilder:
+    _sano: bool = False
+
     def __init__(self):
         pass
+
+    def sano(self, sano: bool) -> "IlluminaBuilder":
+        self._sano = sano
+        return self
 
     def _generate_chrom_pos(self, seed=42):
         rng = random.Random(seed)
@@ -65,6 +71,8 @@ class IlluminaBuilder:
         yield f"Total SNPs	{num_snps}"
         yield f"Num Samples	{num_samples}"
         yield f"Total Samples	{num_samples}"
+        if self._sano:
+            yield "SANO"
 
     @staticmethod
     def _map_to_line(header, data):
@@ -136,9 +144,3 @@ class IlluminaBuilder:
 
     def build_file(self) -> StringIO:
         return StringIO("\n".join(self._generate_lines()))
-
-
-@pytest.fixture
-def fixture_illumina_lines():
-    with IlluminaBuilder().build_file() as illumina:
-        yield illumina

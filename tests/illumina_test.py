@@ -1,11 +1,14 @@
+import itertools
+
 import pytest
 
 from illumina2vcf.illumina import IlluminaReader
+from tests.conftest import IlluminaBuilder
 
 
 class TestIllumina:
-    @pytest.mark.parametrize("sep", ["\t", ","])
-    def test_parse_header(self, sep):
+    @pytest.mark.parametrize("sep,sano", itertools.product(["\t", ","], [False, True]))
+    def test_parse_header(self, sep: str, sano: bool) -> None:
         """
         GIVEN an illumina header
         """
@@ -18,6 +21,8 @@ Num SNPs	730059
 Total SNPs	730059
 Num Samples	24
 Total Samples	24"""
+        if sano:
+            header += "\nSANO"
         header = header.replace("\t", sep)
         """
         WHEN it is parsed
@@ -33,17 +38,19 @@ Total Samples	24"""
         # source must be GSAMD-24v3-0-EA_20034606_A2.bpm
         assert source == "GSAMD-24v3-0-EA_20034606_A2"
 
-    def test_generate_blocks(self, fixture_illumina_lines):
+    @pytest.mark.parametrize("sano", (False, True))
+    def test_generate_blocks(self, sano: bool) -> None:
         """
         GIVEN an illumina file and reader
         """
         reader = IlluminaReader("\t")
+        illumina = IlluminaBuilder().sano(sano).build_file()
 
         """
         WHEN it is parsed
         """
-        date, header_source = reader.parse_header(fixture_illumina_lines)
-        blocks = tuple(reader.generate_line_blocks(fixture_illumina_lines))
+        date, header_source = reader.parse_header(illumina)
+        blocks = tuple(reader.generate_line_blocks(illumina))
 
         """
         THEN it should have blocks of lines
