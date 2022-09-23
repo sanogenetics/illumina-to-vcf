@@ -34,7 +34,9 @@ class ReferenceGenome:
         """
         if start >= end:
             raise ValueError("Start/stop coordinates incorrect for: " + str(chrom) + ":" + str(start) + "-" + str(end))
-
+        # force chr prefix
+        if not chrom.startswith("chr"):
+            chrom = f"chr{chrom}"
         if chrom not in self.reference_fasta:
             raise ValueError("FASTA reference is missing entry for chromosome " + str(chrom))
         ref_base = str(self.reference_fasta[chrom][start:end])

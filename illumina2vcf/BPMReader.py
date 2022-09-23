@@ -1,7 +1,7 @@
 from collections import defaultdict
 
-from BPMRecord import BPMRecord, IndelSourceSequence
-from IlluminaBeadArrayFiles import BeadPoolManifest, RefStrand
+from .BPMRecord import BPMRecord, IndelSourceSequence
+from .IlluminaBeadArrayFiles import BeadPoolManifest, RefStrand
 
 
 class BPMReader(object):
@@ -86,6 +86,9 @@ class ManifestFilter(object):
                 chrom = "X"
             if chrom == "0" or record.pos == 0:
                 continue
+            # force chr prefix
+            if not chrom.startswith("chr"):
+                chrom = f"chr{chrom}"
             if self._loci_to_filter and record.name in self._loci_to_filter:
                 continue
             if not record.is_indel() and self._skip_snps:

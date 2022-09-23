@@ -1,4 +1,4 @@
-from IlluminaBeadArrayFiles import RefStrand
+from .IlluminaBeadArrayFiles import RefStrand
 
 COMPLEMENT_MAP = dict(zip("ABCDGHKMRTVYNID", "TVGHCDMKYABRNID"))
 REQUIRED_INDEL_CONTEXT_LENGTH = 3
