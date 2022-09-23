@@ -5,9 +5,9 @@ WORKDIR /app
 # install subset of reference genome - ~3GB download and ~5MB kept
 # chr1,2,10 for chromosome ordering and autosomal testing
 # chrX,Y for sex chromosome and PAR testing
-# chrM for mitochondial chromosome testing
 # useful for downstream testing purposes
-RUN samtools faidx ref/Homo_sapiens_assembly38.fasta -o ref/Homo_sapiens_assembly38.trim.fasta chr1:1-1000000 chr2:1-1000000 chr10:1-1000000 chrX:1-3000000 chrY:1-3000000 chrM
+# when using a region with samtools faidx it renames the sequence, we need to undo that
+RUN samtools faidx ref/Homo_sapiens_assembly38.fasta 'chr1:1-1000000' 'chr2:1-1000000' 'chr10:1-1000000' 'chrX:1-3000000' 'chrY:1-3000000' | sed 's/:1-[0-9]*//' >ref/Homo_sapiens_assembly38.trim.fasta
 RUN samtools faidx ref/Homo_sapiens_assembly38.trim.fasta
 
 
