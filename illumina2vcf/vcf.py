@@ -148,7 +148,7 @@ class VCFMaker:
         if chm not in self.reference_fasta.faidx.index:
             raise ConverterError(f"Unexpected chromosome {chm}:{block[0]['Position']}")
         if not self.is_valid_chromosome(chm):
-            raise ConverterError(f"Unexpected chromosome {chm}:{block[0]['Position']}")
+            raise ConverterError(f"Invalid chromosome {chm}:{block[0]['Position']}")
         pos = int(block[0]["Position"])
 
         ref = self.ref_lookup(chm, pos)
