@@ -23,6 +23,7 @@ class Converter:
         reference: Union[str, OpenFiles],
         reference_index: Union[str, OpenFiles],
         blocklist_filename: str = "",
+        manifest_file: str = "",
         delimiter: str = ",",
         buildname="GRCh38",
     ) -> None:
@@ -36,8 +37,8 @@ class Converter:
     def convert(self, source, destination) -> None:
         reader = IlluminaReader(self.delimiter, self.blocklist_filename)
         genome_reader = ReferenceGenome(self.reference, self.reference_index)
-        manifest_reader = CSVManifestReader(manifest_file, genome_reader, logger)
-        indel_records = ManifestFilter(manifest_reader, "", True, logger)
+        manifest_reader = CSVManifestReader(self.manifest_file, genome_reader, logger)
+        indel_records = ManifestFilter(manifest_reader, "", True, logger).filtered_records()
         vcfgenerator = VCFMaker(genome_reader, indel_records)
         # read source header
         date, header_source = reader.parse_header(source)
