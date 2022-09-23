@@ -8,8 +8,9 @@ from puretabix.vcf import VCFLine
 from pyfaidx import Fasta
 
 from .illumina import ALLELE1, ALLELE2, SAMPLE_ID, SNP, SNP_NAME, STRAND
+from .IlluminaBeadArrayFiles import RefStrand
 
-STRANDSWAP = {"A": "T", "T": "A", "C": "G", "G": "C"}
+STRANDSWAP = {"A": "T", "T": "A", "C": "G", "G": "C", "I": "I", "D": "D"}
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,7 @@ class VCFMaker:
         )
 
         # ##contig=<ID=1,length=249250621,assembly=GRCh37>
-        for chrom, rec in self.reference_fasta.faidx.index.items():
+        for chrom, rec in self._genome_reader.reference_fasta.faidx.index.items():
             if self.is_valid_chromosome(chrom):
                 yield VCFLine.as_comment_key_dict(
                     "contig",
@@ -134,14 +135,14 @@ class VCFMaker:
         # force chr prefix
         if not chm.startswith("chr"):
             chm = f"chr{chm}"
-        if chm not in self.reference_fasta.faidx.index:
+        if chm not in self._genome_reader.reference_fasta.faidx.index:
             raise ConverterError(f"Unexpected chromosome {chm}:{block[0]['Position']}")
         if not self.is_valid_chromosome(chm):
             raise ConverterError(f"Unexpected chromosome {chm}:{block[0]['Position']}")
         pos = int(block[0]["Position"])
 
-        ref = self._genome_reader.get_reference_bases(chm, pos, pos + 1)
-
+        ref = self._genome_reader.get_reference_bases(chm, pos - 1, pos)
+        converted_calls = {}
         # handel indels
         if "I" in probed or "D" in probed:
             if probed.intersection({"A", "C", "G", "T"}):
@@ -150,19 +151,24 @@ class VCFMaker:
                 )
             try:
                 locus_records = self._indel_records[chm][pos]
-                (ref, alt) = get_record_for_indel(locus_records[0])
+                (ref, alt) = self.get_alleles_for_indel(locus_records[0])
                 for alt_record in locus_records[1:]:
-                    if (ref, alt) != get_record_for_indel(alt_record):
+                    if (ref, alt) != self.get_alleles_for_indel(alt_record):
                         raise ConverterError(
                             f"{';'.join(snp_names)}: Mismatched alleles ({','.join(probed)}) {block[0]['Chr']}:{block[0]['Position']}"
                         )
+                # Illumina position is the position of the insertion (ie; one base after the ref allele)
+                # We want the position of the start of the ref allele, so we need to reduce pos by 1
+                pos -= 1
 
             except KeyError:
                 raise ConverterError(
                     f"{';'.join(snp_names)}: No BPM record ({','.join(probed)}) {block[0]['Chr']}:{block[0]['Position']}"
                 )
             for sampleid in calls:
-                converted_calls[sampleid] = self.convert_indel_genotype_to_vcf(probed, record.is_deletion)
+                converted_calls[sampleid] = self.convert_indel_genotype_to_vcf(
+                    calls[sampleid], locus_records[0].is_deletion
+                )
         else:
             # handle ref/alt split
             if ref not in probed:
@@ -175,7 +181,6 @@ class VCFMaker:
             alt = tuple(sorted(probed))
 
             # convert calls
-            converted_calls = {}
             for sampleid in calls:
                 allele1 = calls[sampleid][0]
                 if allele1 not in "ATCG":
@@ -262,7 +267,7 @@ class VCFMaker:
             string: VCF genotype (e.g, "0/1")
         """
         if not nucleotide_genotypes:
-            return format_vcf_genotype(".", ".")
+            return self.format_vcf_genotype(".", ".")
 
         if is_deletion:
             vcf_allele1_char = "0" if nucleotide_genotypes[0] == "I" else "1"
@@ -271,7 +276,7 @@ class VCFMaker:
             vcf_allele1_char = "1" if nucleotide_genotypes[0] == "I" else "0"
             vcf_allele2_char = "1" if nucleotide_genotypes[1] == "I" else "0"
 
-        vcf_genotype = format_vcf_genotype(vcf_allele1_char, vcf_allele2_char, ploidy)
+        vcf_genotype = self.format_vcf_genotype(vcf_allele1_char, vcf_allele2_char)
 
         return vcf_genotype
 
