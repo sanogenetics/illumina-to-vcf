@@ -25,8 +25,9 @@ class VCFMaker:
     reference_fasta: Fasta
     _buildsizes: Dict[str, str] = {}
 
-    def __init__(self, genome_reader) -> None:
+    def __init__(self, genome_reader, indel_records) -> None:
         self._genome_reader = genome_reader
+        self._indel_records = indel_records
 
     @staticmethod
     def is_valid_chromosome(chrom: str):
@@ -148,8 +149,14 @@ class VCFMaker:
                     f"{';'.join(snp_names)}: contains indels and SNPs ({','.join(probed)}) {block[0]['Chr']}:{block[0]['Position']}"
                 )
             try:
-                record = indel_records[chm][pos]
-                (ref, alt) = get_record_for_indel(record, ref)
+                locus_records = self._indel_records[chm][pos]
+                (ref, alt) = get_record_for_indel(locus_records[0])
+                for alt_record in locus_records[1:]:
+                    if (ref, alt) != get_record_for_indel(alt_record):
+                        raise ConverterError(
+                            f"{';'.join(snp_names)}: Mismatched alleles ({','.join(probed)}) {block[0]['Chr']}:{block[0]['Position']}"
+                        )
+
             except KeyError:
                 raise ConverterError(
                     f"{';'.join(snp_names)}: No BPM record ({','.join(probed)}) {block[0]['Chr']}:{block[0]['Position']}"
@@ -202,6 +209,31 @@ class VCFMaker:
         vcfline = VCFLine("", "", "", {}, chm, pos, snp_names, ref, alt, ".", ["PASS"], {}, samples)
 
         return vcfline
+
+    def get_alleles_for_indel(self, bpm_record):
+        """
+            Determine REF and ALT alleles for indel manifest record
+            Args:
+               bpm_record: BPM record for indel
+        Returns:
+            tupple of REF and ALT alleles
+        """
+
+        (_, indel_sequence, _) = bpm_record.get_indel_source_sequences(RefStrand.Plus)
+        start_index = bpm_record.pos - 1
+        chrom = bpm_record.chromosome
+        if chrom == "XX" or chrom == "XY":
+            chrom = "X"
+
+        if bpm_record.is_deletion:
+            reference_base = self._genome_reader.get_reference_bases(chrom, start_index - 1, start_index)
+            reference_allele = reference_base + indel_sequence
+            alternate_allele = reference_base
+        else:
+            reference_base = self._genome_reader.get_reference_bases(chrom, start_index, start_index + 1)
+            reference_allele = reference_base
+            alternate_allele = reference_base + indel_sequence
+        return (reference_allele, alternate_allele)
 
     def format_vcf_genotype(self, vcf_allele1_char, vcf_allele2_char):
         """
