@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from BPMRecord import BPMRecord, IndelSourceSequence
 from IlluminaBeadArrayFiles import BeadPoolManifest, RefStrand
 
@@ -57,34 +59,41 @@ class ManifestFilter(object):
         source_file (string) : The file used a source for records
     """
 
-    def __init__(self, manifest_reader, loci_to_filter, skip_indels, logger):
+    def __init__(self, manifest_reader, loci_to_filter, skip_snps, logger):
         """
         Return a new ManifestFilter. Will skip records as specified in constructor
         as well as records with chromosome or mapping of zero.
         Args:
             manifest_reader (CSVManifestReader/BPMReader) : The source of BPM records
             loci_to_filter (set(string)) : A set of record names to skip, may be None
-            skip_indels (bool) : Skip indels
+            skip_snps (bool) : Skip SNPs
             logger (Logger) : logger
         Returns:
             ManifestFilter
         """
         self._manifest_reader = manifest_reader
         self._loci_to_filter = loci_to_filter
-        self._skip_indels = skip_indels
+        self._skip_snps = skip_snps
         self._logger = logger
         self.source_file = manifest_reader.source_file
+        self.filtered_records = self.get_bpm_records
 
     def get_bpm_records(self):
+        filtered_records = {}
         for record in self._manifest_reader.get_bpm_records():
-            if record.chromosome == "0" or record.pos == 0:
+            chrom = record.chromosome
+            if chrom == "XX" or chrom == "XY":
+                chrom = "X"
+            if chrom == "0" or record.pos == 0:
                 continue
             if self._loci_to_filter and record.name in self._loci_to_filter:
                 continue
-            if record.is_indel() and self._skip_indels:
-                self._logger.warning("Skipping indel " + record.name)
+            if not record.is_indel() and self._skip_snps:
                 continue
-            yield record
+            if not chrom in filtered_records:
+                filtered_records[chrom] = defaultdict(list)
+            filtered_records[chrom][record.pos].append(record)
+        return filtered_records
 
 
 class CSVManifestReader(object):
