@@ -16,7 +16,19 @@ STRAND = "Plus/Minus Strand"
 logger = logging.getLogger(__name__)
 
 
+class PositionError(Exception):
+    pass
+
+
+class HeaderError(Exception):
+    pass
+
+
 class DateError(Exception):
+    pass
+
+
+class DataError(Exception):
     pass
 
 
@@ -63,7 +75,11 @@ class IlluminaReader:
 
             file_header[key] = value
             # safety valve
-            assert len(file_header) < 100
+            if len(file_header) >= 100:
+                raise HeaderError("Header too long")
+
+        if "Content" not in file_header:
+            raise HeaderError("Unable to find Content field in header")
 
         source = file_header["Content"].split(".", 1)[0][1:].strip()  # remove trailing .pbm and leading sep char
 
@@ -76,7 +92,6 @@ class IlluminaReader:
         date_components = date.replace("/", "-").split("-")
         # not three pieces
         if len(date_components) != 3:
-
             raise DateError(f"Cannot parse Processing date '{date}' - not 3 components")
         if len(date_components[2]) == 4:
             # four digit year at end --- assume m/d/y
@@ -97,9 +112,22 @@ class IlluminaReader:
 
     def generate_line_blocks(self, input: Iterable[str]) -> Generator[List[Dict[str, str]], None, None]:
         block: List[dict] = []
-        for row in csv.DictReader(input, delimiter=self.delimiter):
+        for i, row in enumerate(csv.DictReader(input, delimiter=self.delimiter)):
+            if CHR not in row:
+                raise DataError(f"{CHR} missing in row {i}")
+            if POSITION not in row:
+                raise DataError(f"{POSITION} missing in row {i}")
+            if SNP_NAME not in row:
+                raise DataError(f"{SNP_NAME} missing in row {i}")
+            if SNP not in row:
+                raise DataError(f"{SNP} missing in row {i}")
+
             # is there an existing block that has ended?
             if block and (block[0][CHR] != row[CHR] or block[0][POSITION] != row[POSITION]):
+                # check we haven't gone backwards
+                if block[0][CHR] == row[CHR] and int(block[0][POSITION]) > int(row[POSITION]):
+                    raise PositionError(f"Position decrease on {row[CHR]} from {block[0][POSITION]} to {row[POSITION]}")
+                # complete the previous block
                 yield block
                 block = []
             # ignore probes without chr or pos
