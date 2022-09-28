@@ -3,9 +3,9 @@ from typing import Union
 
 from fsspec.core import OpenFiles
 
-from .BPMReader import CSVManifestReader, ManifestFilter
+from .bpm.BPMReader import CSVManifestReader, ManifestFilter
+from .bpm.ReferenceGenome import ReferenceGenome
 from .illumina import IlluminaReader
-from .ReferenceGenome import ReferenceGenome
 from .vcf import VCFMaker
 
 logger = logging.getLogger(__name__)

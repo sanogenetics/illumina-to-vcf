@@ -7,8 +7,8 @@ from fsspec.core import OpenFile
 from puretabix.vcf import VCFLine
 from pyfaidx import Fasta
 
+from .bpm.IlluminaBeadArrayFiles import RefStrand
 from .illumina import ALLELE1, ALLELE2, SAMPLE_ID, SNP, SNP_NAME, STRAND
-from .IlluminaBeadArrayFiles import RefStrand
 
 STRANDSWAP = {"A": "T", "T": "A", "C": "G", "G": "C", "I": "I", "D": "D"}
 
