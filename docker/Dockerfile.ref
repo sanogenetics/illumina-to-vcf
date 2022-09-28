@@ -15,7 +15,7 @@ RUN curl "https://storage.googleapis.com/genomics-public-data/resources/broad/hg
 # now copy the references into the final image
 # do this to use docker layer caching to cache the downloaded reference information
 
-FROM sanogenetics/illumina2vcf:latest
+FROM illumina2vcf:latest
 
 WORKDIR /app
 RUN mkdir ref

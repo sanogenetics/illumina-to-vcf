@@ -30,7 +30,9 @@ unzip -p FinalReport.zip | tail -n+11 | grep -v NA12878 | sort -Vt , -k 9 -k 10 
 Running the script is done like:
 
 ```sh
+
 gunzip -c input.txt.gz | python3 -m illumina2vcf --manifest GSA-24v3-0_A2.csv --tab Homo_sapiens_assembly38.fasta | bgzip > output.vcf.gz
+
 ```
 
 Polishing includes resorting (chrX SNPs out of order because chrXY get converted to chrX) and tabix indexing
@@ -44,7 +46,7 @@ Note these steps can be piped together
 ```sh
 { unzip -p FinalReport.zip | head; \
   unzip -p FinalReport.zip | tail -n+11 \
-  | grep -v NA12878 | sort -Vt , -k 9 -k 10 -k 4 -k 5 \
+  | grep -v NA12878 | sort -Vt , -k 9 -k 10 -k 4 -k 5 ; \
  } | python3 -m illumina2vcf --manifest GSA-24v3-0_A2.csv --tab Homo_sapiens_assembly38.fasta \
 | bcftools sort -Oz > out.vcf.gz
 ```

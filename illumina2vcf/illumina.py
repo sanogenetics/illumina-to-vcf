@@ -53,8 +53,14 @@ class IlluminaReader:
                 continue
             if line == "[Data]":
                 break
-            assert self.delimiter in line, f"'{self.delimiter}' not in '{line}'"
-            key, value = line.split(self.delimiter, 1)
+            # handle files with a header line without a delimiter in them
+            # e.g. legacy SANO files
+            if self.delimiter in line:
+                key, value = line.split(self.delimiter, 1)
+            else:
+                key = line
+                value = ""
+
             file_header[key] = value
             # safety valve
             assert len(file_header) < 100
