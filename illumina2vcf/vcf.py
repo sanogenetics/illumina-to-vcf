@@ -163,7 +163,7 @@ class VCFMaker:
 
             except KeyError:
                 raise ConverterError(
-                    f"{';'.join(snp_names)}: No BPM record ({','.join(probed)}) {block[0]['Chr']}:{block[0]['Position']}"
+                    f"{';'.join(snp_names)}: No BPM record for indel ({','.join(probed)}) {block[0]['Chr']}:{block[0]['Position']}"
                 )
             for sampleid in calls:
                 converted_calls[sampleid] = self.convert_indel_genotype_to_vcf(
