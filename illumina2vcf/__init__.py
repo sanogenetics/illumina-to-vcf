@@ -3,6 +3,8 @@ from typing import Union
 
 from fsspec.core import OpenFiles
 
+from .bpm.BPMReader import CSVManifestReader, ManifestFilter
+from .bpm.ReferenceGenome import ReferenceGenome
 from .illumina import IlluminaReader
 from .vcf import VCFMaker
 
@@ -13,6 +15,7 @@ class Converter:
     reference: Union[str, OpenFiles]
     reference_index: Union[str, OpenFiles]
     blocklist_filename: str
+    manifest_file: str
     delimiter: str
 
     def __init__(
@@ -20,18 +23,26 @@ class Converter:
         reference: Union[str, OpenFiles],
         reference_index: Union[str, OpenFiles],
         blocklist_filename: str = "",
+        manifest_file: str = "",
         delimiter: str = ",",
         buildname="GRCh38",
     ) -> None:
         self.reference = reference
         self.reference_index = reference_index
         self.blocklist_filename = blocklist_filename
+        self.manifest_file = manifest_file
         self.delimiter = delimiter
         self.buildname = buildname
 
     def convert(self, source, destination) -> None:
         reader = IlluminaReader(self.delimiter, self.blocklist_filename)
-        vcfgenerator = VCFMaker(self.reference, self.reference_index)
+        genome_reader = ReferenceGenome(self.reference, self.reference_index)
+        if self.manifest_file:
+            manifest_reader = CSVManifestReader(self.manifest_file, genome_reader, logger)
+            indel_records = ManifestFilter(manifest_reader, "", True, logger).filtered_records()
+        else:
+            indel_records = {}
+        vcfgenerator = VCFMaker(genome_reader, indel_records)
         # read source header
         date, header_source = reader.parse_header(source)
         # write header

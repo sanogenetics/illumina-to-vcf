@@ -1,6 +1,7 @@
 in/
 venv/
 data/
+test_data/
 *.vcf.gz
 *.vcf.gz.tbi
 .DS_Store

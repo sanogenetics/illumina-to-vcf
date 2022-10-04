@@ -114,10 +114,6 @@ class IlluminaReader:
             if "ilmndup" in row[SNP_NAME]:
                 logger.debug(f"Ignoring ilmndup {row[SNP_NAME]}")
                 continue
-            # ignore rows that are indels
-            if row[SNP] in ("[D/I]", "[I/D]"):
-                logger.debug(f"Ignoring indel {row[SNP_NAME]}")
-                continue
 
             block.append(row)
 
