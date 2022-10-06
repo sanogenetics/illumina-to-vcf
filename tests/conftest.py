@@ -3,8 +3,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from io import StringIO
 
-import pytest
-
 
 @dataclass
 class Probe:
@@ -29,28 +27,25 @@ class IlluminaBuilder:
     def _generate_chrom_pos(self, seed=42):
         rng = random.Random(seed)
         # human is about 3 billion over 23 chromosome
-        # we can simplify a bit, 8 chromosomes and 80m bases
+        # we can simplify a bit, 6 chromosomes and 18m bases
         chroms = ["1", "2", "11", "X", "Y", "MT"]
         for chrom in chroms:
             pos = 10000  # minimum position on a chromosome
-            while pos < 10000000:
+            while pos < 3000000:
                 # GSA+MD is about 700,000 probes over 3b bases, so ~5kb apart
                 pos += rng.randint(1, 10000)
-                # simulate PAR
-                if chrom in ["X", "Y"] and pos < 2781479:
-                    chrom = "XY"
                 yield chrom, pos
 
     def _generate_ref(self, salt=42):
         for chrom, pos in self._generate_chrom_pos():
             rng = random.Random(str((chrom, pos, salt)))
-            yield chrom, pos, rng.choice(("A", "T", "C", "G"))
+            yield chrom, pos, rng.choice("ATCG")
 
     def _generate_probes(self, salt=42):
         for chrom, pos, ref in self._generate_ref():
             rng = random.Random(str((chrom, pos, ref, salt)))
             a = ref
-            b = rng.choice(tuple(set(("A", "T", "C", "G")) - set(ref)))
+            b = rng.choice(tuple(set("ATCG") - set(ref)))
             # TODO sometimes generate multiple probes at same location
             yield Probe(
                 name=f"{chrom}:{pos}:{ref}",
