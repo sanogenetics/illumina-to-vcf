@@ -9,7 +9,6 @@ class ReferenceGenome:
     reference: Union[str, OpenFile]
     reference_index: Union[str, OpenFile]
     reference_fasta: Fasta
-    _buildsizes: Dict[str, str] = {}
 
     def __init__(self, reference: Union[str, OpenFile], reference_index: Union[str, OpenFile]) -> None:
         self.reference = reference

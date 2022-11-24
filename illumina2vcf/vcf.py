@@ -1,13 +1,11 @@
-import csv
 import logging
 import re
-from typing import Dict, Generator, Iterable, List, Tuple, Union
+from typing import Dict, Generator, Iterable, List, Tuple
 
-from fsspec.core import OpenFile
 from puretabix.vcf import VCFLine
-from pyfaidx import Fasta
 
 from .bpm.IlluminaBeadArrayFiles import RefStrand
+from .bpm.ReferenceGenome import ReferenceGenome
 from .illumina import ALLELE1, ALLELE2, SAMPLE_ID, SNP, SNP_NAME, STRAND
 
 STRANDSWAP = {"A": "T", "T": "A", "C": "G", "G": "C", "I": "I", "D": "D"}
@@ -20,13 +18,10 @@ class ConverterError(Exception):
 
 
 class VCFMaker:
+    _genome_reader: ReferenceGenome
+    _indel_records: Dict
 
-    reference: Union[str, OpenFile]
-    reference_index: Union[str, OpenFile]
-    reference_fasta: Fasta
-    _buildsizes: Dict[str, str] = {}
-
-    def __init__(self, genome_reader, indel_records) -> None:
+    def __init__(self, genome_reader: ReferenceGenome, indel_records: Dict = {}) -> None:
         self._genome_reader = genome_reader
         self._indel_records = indel_records
 
@@ -150,7 +145,7 @@ class VCFMaker:
                     f"{';'.join(snp_names)}: contains indels and SNPs ({','.join(probed)}) {block[0]['Chr']}:{block[0]['Position']}"
                 )
             try:
-                locus_records = self._indel_records[chm][pos]
+                locus_records = self._indel_records[(chm, pos)]
                 (ref, alt) = self.get_alleles_for_indel(locus_records[0])
                 for alt_record in locus_records[1:]:
                     if (ref, alt) != self.get_alleles_for_indel(alt_record):

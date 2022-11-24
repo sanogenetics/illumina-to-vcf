@@ -1,42 +1,64 @@
+import logging
+from typing import Optional, Tuple
+
 from .IlluminaBeadArrayFiles import RefStrand
+from .ReferenceGenome import ReferenceGenome
+
+logger = logging.getLogger(__name__)
 
 COMPLEMENT_MAP = dict(zip("ABCDGHKMRTVYNID", "TVGHCDMKYABRNID"))
-REQUIRED_INDEL_CONTEXT_LENGTH = 3
+DEGENERACY_MAP = {
+    "A": "A",
+    "C": "C",
+    "G": "G",
+    "T": "T",
+    "R": "AG",
+    "Y": "CT",
+    "S": "GC",
+    "W": "AT",
+    "K": "GT",
+    "M": "AC",
+    "B": "CGT",
+    "D": "AGT",
+    "H": "ACT",
+    "V": "ACG",
+    "N": "ATCG",
+}
 
 
-def reverse(sequence):
+def reverse(sequence: str) -> str:
     """
     Reverse a string
     Args:
-        sequence (string): Sequence to reverse
+        sequence    Sequence to reverse
     Returns:
-        string: The reversed sequence
+        The reversed sequence
     """
     return sequence[::-1]
 
 
-def complement(sequence):
+def complement(sequence: str) -> str:
     """
     Complement a nucleotide sequence. Note that complement of D and I are D and I,
     respectively. This is intended to be called on the "SNP" portion of a source sequence.
     Args:
-        sequence (string): The input sequence
+        sequence    The input sequence
     Returns:
-        string: The complemented sequence
+        The complemented sequence
     """
     return "".join(COMPLEMENT_MAP[x] for x in sequence)
 
 
-def determine_left_shift(five_prime, indel, three_prime):
+def determine_left_shift(five_prime: str, indel: str, three_prime: str) -> Tuple[str, str]:
     """
     Adjust 5' and 3' context of indel such that
     indel is fully shifted to 5'
     Args:
-        five_prime (string) : Five prime sequence
-        indel (string) : Sequence of indel
-        three_prime (string) : Three prime sequence
+        five_prime      Five prime sequence
+        indel           Sequence of indel
+        three_prime     Three prime sequence
     Returns:
-        (string, string) : New sequence of 5' and 3' sequences
+        Tuple of new 5' and 3' sequences
     """
     while five_prime.endswith(indel):
         five_prime = five_prime[: -len(indel)]
@@ -48,80 +70,185 @@ def determine_left_shift(five_prime, indel, three_prime):
     return (five_prime, three_prime)
 
 
-def reverse_complement(sequence):
+def reverse_complement(sequence: str) -> str:
     """
     Reverse complement a sequence
     Args:
-        sequence (string): The input sequence
+        sequence    The input sequence
     Returns:
-        string: The reverse-complement of the input sequence
+        The reverse-complement of the input sequence
     """
     return reverse(complement(sequence))
 
 
-class BPMRecord(object):
+def max_suffix_match(str1: str, str2: str) -> int:
+    """
+    Determine the maximum length of exact suffix
+    match between str1 and str2
+    str2 may contain degenerate IUPAC characters
+    Args:
+        str1    First string
+        str2    Second string
+    Returns:
+        Length of maximum suffix match
+    """
+    result = 0
+    for (char1, char2) in zip(str1[::-1], str2[::-1]):
+        assert char1 in "ACGT"
+        if char1 in DEGENERACY_MAP[char2]:
+            result += 1
+        else:
+            break
+    return result
+
+
+def max_prefix_match(str1: str, str2: str) -> int:
+    """
+    Determine the maximum length of exact prefix
+    match between str1 and str2
+    str2 may contain degenerate IUPAC characters
+    Args:
+        str1    First string
+        str2    Second string
+    Returns:
+        Length of maximum prefix match
+    """
+    result = 0
+    for (char1, char2) in zip(str1, str2):
+        assert char1 in "ACGT"
+        if char1 in DEGENERACY_MAP[char2]:
+            result += 1
+        else:
+            break
+    return result
+
+
+class IndelSourceSequence:
+    five_prime: str
+    indel: str
+    three_prime: str
+    """
+    Represents the source sequence for an indel
+    Attributes:
+        five_prime      Sequence 5' of indel (on the design strand)
+        indel           Indel sequence (on the design strand)
+        three_prime     Sequence 3' of indel (on the design strand)
+    """
+
+    def __init__(self, source_sequence):
+        (self.five_prime, self.indel, self.three_prime) = self.split_source_sequence(source_sequence.upper())
+
+    def get_split_sequence(self, generate_reverse_complement: bool, left_shift: bool) -> Tuple[str, str, str]:
+        """
+        Return the components of the indel source sequence
+        Args:
+            generate_reverse_complement         Return reverse complement of original source sequence
+            left_shift                          Left shift position of indel on requested strand
+        Returns:
+            (five_prime, indel, three_prime)    Tuple of three components of indel source sequence
+        """
+        if generate_reverse_complement:
+            (five_prime, indel, three_prime) = (
+                reverse_complement(self.three_prime),
+                reverse_complement(self.indel),
+                reverse_complement(self.five_prime),
+            )
+        else:
+            (five_prime, indel, three_prime) = (self.five_prime, self.indel, self.three_prime)
+
+        if left_shift:
+            (five_prime, three_prime) = determine_left_shift(five_prime, indel, three_prime)
+        return (five_prime, indel, three_prime)
+
+    @staticmethod
+    def split_source_sequence(source_sequence: str) -> Tuple[str, str, str]:
+        """
+        Break source sequence into different piecdes
+        Args:
+            source_sequence             Source sequence string (e.g., ACGT[-/AGA]ATAT)
+        Returns:
+            (string, string, string)    Tuple with 5' sequence, indel sequence, 3' sequence
+        """
+        left_position = source_sequence.find("/")
+        right_position = source_sequence.find("]")
+        assert source_sequence[left_position - 1] == "-"
+        return (
+            source_sequence[: (left_position - 2)],
+            source_sequence[(left_position + 1) : right_position],
+            source_sequence[(right_position + 1) :],
+        )
+
+
+class BPMRecord:
+    name: str
+    address_a: str
+    probe_a: str
+    chromosome: str
+    pos: int
+    snp: str
+    ref_strand: int
+    assay_type: int
+    indel_source_sequence: Optional[IndelSourceSequence]
+    index_num: int
+    is_deletion: Optional[bool]
     """
     Represents entry from a manifest.abs
     Attributes:
-        name (string): Entry name (unique)
-        address_a (string): Address of probe A
+        name                    Entry name (unique)
+        address_a               Address of probe A
         probe_a (string): Sequence of probe A
-        chromosome (string): Chromsome name
-        pos (int): Mapping position
-        snp (string): SNP variation (e.g., [A/C])
-        ref_strand (RefStrand): Reference strand of snp
-        assay_type (int): 0 for Inf II, 1 for Inf I
-        indel_source_sequence (IndelSourceSequence): Sequence of indel (on design strand), None for SNV
-        index_num (int): Index in original manifest
-        is_deletion (bool): Whether indel record represents deletion, None for SNV
+        chromosome              Chromsome name
+        pos                     Mapping position
+        snp                     SNP variation (e.g., [A/C])
+        ref_strand              Reference strand of snp
+        assay_type              0 for Inf II, 1 for Inf I
+        indel_source_sequence   Sequence of indel (on design strand), None for SNV
+        index_num               Index in original manifest
+        is_deletion             Whether indel record represents deletion, None for SNV
     """
 
     def __init__(
         self,
-        name,
-        address_a,
-        probe_a,
-        chromosome,
-        pos,
-        snp,
-        ref_strand,
-        assay_type,
-        indel_source_sequence,
-        source_strand,
-        ilmn_strand,
-        genome_reader,
-        index,
-        logger,
+        name: str,
+        address_a: str,
+        probe_a: str,
+        chromosome: str,
+        pos: int,
+        snp: str,
+        ref_strand: int,
+        assay_type: int,
+        indel_source_sequence: Optional[IndelSourceSequence],
+        source_strand: str,
+        ilmn_strand: str,
+        genome_reader: Optional[ReferenceGenome],
+        index: int,
     ):
         """
         Create a new BPM record
         Args:
-            name (string) : Name field from manifest
-            address_a (string) : AddressA_ID field from manifest
-            probe_a (string) : AlleleA_ProbeSeq field from manifest
-            chromosome (string) : Chr field from manifest
-            pos (string, int) : MapInfo field from manifest
-            ref_strand (RefStrand) : RefStrand from manifest
-            assay_type (int) : 0 for Inf II, 1 for Inf I
-            indel_source_sequence (IndelSourceSequence) : Source sequence for indel, may be None for SNV
-            source_strand (string) : SourceStrand field from manifest
-            ilmn_strand (strinng) : IlmnStrand field from manifest
-            genome_reader (ReferenceGenome,CachedReferenceGenome) : Allows query of genomic sequence, may be None for SNV
-            index (int) : Index of entry within manifest/GTC files
-            logger (Logger) : A logger
+            name                    Name field from manifest
+            address_a               AddressA_ID field from manifest
+            chromosome              Chr field from manifest
+            pos                     MapInfo field from manifest
+            ref_strand              RefStrand from manifest
+            assay_type              0 for Inf II, 1 for Inf I
+            indel_source_sequence   Source sequence for indel, may be None for SNV
+            source_strand           SourceStrand field from manifest
+            ilmn_strand             IlmnStrand field from manifest
+            genome_reader           Allows query of genomic sequence, may be None for SNV
+            index                   Index of entry within manifest/GTC files
         """
         self.name = name
         self.address_a = address_a
         self.probe_a = probe_a
         self.chromosome = chromosome
-        self.pos = int(pos)
+        self.pos = pos
         self.snp = snp
         self.ref_strand = ref_strand
         self.assay_type = assay_type
         self.indel_source_sequence = indel_source_sequence
         self._genome_reader = genome_reader
         self.index_num = index
-        self._logger = logger
 
         self.plus_strand_alleles = self._determine_plus_strand_alleles(snp, ref_strand)
 
@@ -132,10 +259,10 @@ class BPMRecord(object):
             if source_strand == "U" or ilmn_strand == "U":
                 raise ValueError('Unable to process indel with customer or ILMN strand value of "U"')
 
-            if source_strand == "P" or source_strand == "M":
-                assert ilmn_strand == "P" or ilmn_strand == "M"
+            if source_strand in ["P", "M"]:
+                assert ilmn_strand in ["P", "M"]
             else:
-                assert ilmn_strand == "T" or ilmn_strand == "B"
+                assert ilmn_strand in ["T", "B"]
 
             self.is_source_on_design_strand = source_strand == ilmn_strand
             self.is_deletion = self._calculate_is_deletion()
@@ -143,7 +270,7 @@ class BPMRecord(object):
             self.is_source_on_design_strand = None
             self.is_deletion = None
 
-    def is_indel(self):
+    def is_indel(self) -> bool:
         """
         Check whether a BPM record represents an indel
         Args:
@@ -153,12 +280,13 @@ class BPMRecord(object):
         """
         return "D" in self.snp
 
-    def get_indel_source_sequences(self, ref_strand):
+    def get_indel_source_sequences(self, ref_strand: int) -> Tuple[str, str, str]:
+        assert self.indel_source_sequence
         return self.indel_source_sequence.get_split_sequence(
             self.is_source_on_design_strand != (self.ref_strand == ref_strand), True
         )
 
-    def _calculate_is_deletion(self):
+    def _calculate_is_deletion(self) -> Optional[bool]:
         if self.chromosome == "0" or self.pos == 0:
             return None
 
@@ -167,6 +295,8 @@ class BPMRecord(object):
 
         # get indel sequence on the plus strand
         (five_prime, indel_sequence, three_prime) = self.get_indel_source_sequences(RefStrand.Plus)
+
+        assert self._genome_reader
 
         genomic_sequence = self._genome_reader.get_reference_bases(
             chromosome, start_index, start_index + len(indel_sequence)
@@ -228,142 +358,29 @@ class BPMRecord(object):
 
         if is_deletion:
             if deletion_context_score < 1.0:
-                self._logger.warn("Incomplete match of source sequence to genome for indel " + self.name)
+                logger.warn("Incomplete match of source sequence to genome for indel " + self.name)
 
         if is_insertion:
             if insertion_context_score < 1.0:
-                self._logger.warn("Incomplete match of source sequence to genome for indel " + self.name)
+                logger.warn("Incomplete match of source sequence to genome for indel " + self.name)
 
         return is_deletion
 
-    def _determine_plus_strand_alleles(self, snp, ref_strand):
+    def _determine_plus_strand_alleles(self, snp: str, ref_strand: int) -> Tuple[str, str]:
         """
         Return the nucleotides alleles for the record on the plus strand.
         If record is indel, will return alleles in terms of D/I SNP convention
         Args:
             None
         Returns
-            None
+            tuple of alleles
         Raises:
             Exception - Record does not contains reference strand information
         """
-        nucleotides = [snp[1], snp[-2]]
+        nucleotides = (snp[1], snp[-2])
         if ref_strand == RefStrand.Plus:
             return nucleotides
         elif ref_strand == RefStrand.Minus:
-            return [COMPLEMENT_MAP[nucleotide] for nucleotide in nucleotides]
+            return tuple(COMPLEMENT_MAP[nucleotide] for nucleotide in nucleotides)
         else:
             raise Exception("Manifest must contain reference strand information")
-
-
-class IndelSourceSequence(object):
-    """
-    Represents the source sequence for an indel
-    Attributes:
-        five_prime (string) : Sequence 5' of indel (on the design strand)
-        indel (string) : Indel sequence (on the design strand)
-        three_prime (string) : Sequence 3' of indel (on the design strand)
-    """
-
-    def __init__(self, source_sequence):
-        (self.five_prime, self.indel, self.three_prime) = self.split_source_sequence(source_sequence.upper())
-
-    def get_split_sequence(self, generate_reverse_complement, left_shift):
-        """
-        Return the components of the indel source sequence
-        Args:
-            generate_reverse_complement (bool) : Return reverse complement of original source sequence
-            left_shift (bool) : Left shift position of indel on requested strand
-        Returns:
-            (five_prime, indel, three_prime) = Sequences of three components of indel source sequence
-        """
-        if generate_reverse_complement:
-            (five_prime, indel, three_prime) = (
-                reverse_complement(self.three_prime),
-                reverse_complement(self.indel),
-                reverse_complement(self.five_prime),
-            )
-        else:
-            (five_prime, indel, three_prime) = (self.five_prime, self.indel, self.three_prime)
-
-        if left_shift:
-            (five_prime, three_prime) = determine_left_shift(five_prime, indel, three_prime)
-        return (five_prime, indel, three_prime)
-
-    @staticmethod
-    def split_source_sequence(source_sequence):
-        """
-        Break source sequence into different piecdes
-        Args:
-            source_sequence (string): Source sequence string (e.g., ACGT[-/AGA]ATAT)
-        Returns:
-            (string, string, string) : Tuple with 5' sequence, indel sequence, 3' sequence
-        """
-        left_position = source_sequence.find("/")
-        right_position = source_sequence.find("]")
-        assert source_sequence[left_position - 1] == "-"
-        return (
-            source_sequence[: (left_position - 2)],
-            source_sequence[(left_position + 1) : right_position],
-            source_sequence[(right_position + 1) :],
-        )
-
-
-DEGENERACY_MAP = {}
-DEGENERACY_MAP["A"] = "A"
-DEGENERACY_MAP["C"] = "C"
-DEGENERACY_MAP["G"] = "G"
-DEGENERACY_MAP["T"] = "T"
-DEGENERACY_MAP["R"] = "AG"
-DEGENERACY_MAP["Y"] = "CT"
-DEGENERACY_MAP["S"] = "GC"
-DEGENERACY_MAP["W"] = "AT"
-DEGENERACY_MAP["K"] = "GT"
-DEGENERACY_MAP["M"] = "AC"
-DEGENERACY_MAP["B"] = "CGT"
-DEGENERACY_MAP["D"] = "AGT"
-DEGENERACY_MAP["H"] = "ACT"
-DEGENERACY_MAP["V"] = "ACG"
-DEGENERACY_MAP["N"] = "ACGT"
-
-
-def max_suffix_match(str1, str2):
-    """
-    Determine the maximum length of exact suffix
-    match between str1 and str2
-    str2 may contain degenerate IUPAC characters
-    Args:
-        str1 (string) : First string
-        str2 (string) : Second string
-    Returns:
-        int : Length of maximum suffix match
-    """
-    result = 0
-    for (char1, char2) in zip(str1[::-1], str2[::-1]):
-        assert char1 in "ACGT"
-        if char1 in DEGENERACY_MAP[char2]:
-            result += 1
-        else:
-            break
-    return result
-
-
-def max_prefix_match(str1, str2):
-    """
-    Determine the maximum length of exact prefix
-    match between str1 and str2
-    str2 may contain degenerate IUPAC characters
-    Args:
-        str1 (string) : First string
-        str2 (string) : Second string
-    Returns:
-        int : Length of maximum prefix match
-    """
-    result = 0
-    for (char1, char2) in zip(str1, str2):
-        assert char1 in "ACGT"
-        if char1 in DEGENERACY_MAP[char2]:
-            result += 1
-        else:
-            break
-    return result
