@@ -3,7 +3,8 @@ import itertools
 import pytest
 
 from illumina2vcf.illumina import IlluminaReader
-from tests.conftest import IlluminaBuilder
+
+from .conftest import IlluminaBuilder
 
 
 class TestIllumina:
@@ -49,7 +50,7 @@ Total Samples	24"""
         """
         WHEN it is parsed
         """
-        date, header_source = reader.parse_header(illumina)
+        _, _ = reader.parse_header(illumina)
         blocks = tuple(reader.generate_line_blocks(illumina))
 
         """

@@ -358,11 +358,11 @@ class BPMRecord:
 
         if is_deletion:
             if deletion_context_score < 1.0:
-                logger.warn("Incomplete match of source sequence to genome for indel " + self.name)
+                logger.warning("Incomplete match of source sequence to genome for indel " + self.name)
 
         if is_insertion:
             if insertion_context_score < 1.0:
-                logger.warn("Incomplete match of source sequence to genome for indel " + self.name)
+                logger.warning("Incomplete match of source sequence to genome for indel " + self.name)
 
         return is_deletion
 

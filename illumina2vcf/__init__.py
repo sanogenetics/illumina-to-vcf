@@ -1,5 +1,6 @@
 import logging
-from typing import Union
+from io import TextIOBase
+from typing import Iterable, Union
 
 from fsspec.core import OpenFile
 
@@ -34,7 +35,7 @@ class Converter:
         self.delimiter = delimiter
         self.buildname = buildname
 
-    def convert(self, source, destination) -> None:
+    def convert(self, source: Iterable[str], destination: TextIOBase) -> None:
         reader = IlluminaReader(self.delimiter, self.blocklist_filename)
 
         genome_reader = ReferenceGenome(self.reference, self.reference_index)

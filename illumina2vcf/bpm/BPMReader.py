@@ -1,5 +1,5 @@
 import logging
-from typing import FrozenSet, Iterable
+from typing import Dict, FrozenSet, Iterable, Tuple
 
 from .BPMRecord import BPMRecord, IndelSourceSequence
 from .IlluminaBeadArrayFiles import RefStrand
@@ -98,7 +98,7 @@ class CSVManifestReader:
                         idx,
                     )
                 except Exception as error:
-                    logger.warn("Failed to process entry for record %s: %s", name, str(error))
+                    logger.warning("Failed to process entry for record %s: %s", name, str(error))
 
 
 class ManifestFilter:
@@ -119,7 +119,7 @@ class ManifestFilter:
         self.loci_to_filter = frozenset(loci_to_filter)
         self.skip_snps = skip_snps
 
-    def filtered_records(self):
+    def filtered_records(self) -> Dict[Tuple[str, int], BPMRecord]:
         filtered_records = {}
         for record in self.manifest_reader.get_bpm_records():
 
