@@ -5,23 +5,20 @@ WORKDIR /app
 # install subset of reference genome - ~3GB download and ~5MB kept
 # chr1,2,10 for chromosome ordering and autosomal testing
 # chrX,Y for sex chromosome and PAR testing
+# limit to 3million bases (full chr1 is 249million)
 # useful for downstream testing purposes
 # when using a region with samtools faidx it renames the sequence, we need to undo that
-RUN samtools faidx ref/Homo_sapiens_assembly38.fasta 'chr1:1-1000000' 'chr2:1-1000000' 'chr10:1-1000000' 'chrX:1-3000000' 'chrY:1-3000000' | sed 's/:1-[0-9]*//' >ref/Homo_sapiens_assembly38.trim.fasta
+RUN samtools faidx ref/Homo_sapiens_assembly38.fasta 'chr1:1-3000000' 'chr2:1-3000000' 'chr10:1-3000000' 'chrX:1-3000000' 'chrY:1-3000000' | sed 's/:1-[0-9]*//' >ref/Homo_sapiens_assembly38.trim.fasta
 RUN samtools faidx ref/Homo_sapiens_assembly38.trim.fasta
 
-RUN curl "https://sano-public.s3.eu-west-2.amazonaws.com/GSA-24v3-0_A2.csv.gz" \
-  -o ref/GSA-24v3-0_A2.csv.gz
+# reduce manifest file in the same way
+# keep the header
+# filter only to specific chrom,pos
 RUN gunzip -c ref/GSA-24v3-0_A2.csv.gz | head -n 8 > ref/GSA-24v3-0_A2.trim.csv \
   && gunzip -c ref/GSA-24v3-0_A2.csv.gz \
-  | grep -E '(,38,1,)|(,38,2,)|(,38,10,)' \
-  | awk -F',' '$11<1000000' \
-  >> ref/GSA-24v3-0_A2.trim.csv \
-  && gunzip -c ref/GSA-24v3-0_A2.csv.gz \
-  | grep -E '(,38,X,)|(,38,Y,)' \
+  | grep -E '(,38,1,)|(,38,2,)|(,38,10,)|(,38,X,)|(,38,Y,)' \
   | awk -F',' '$11<3000000' \
-  >> ref/GSA-24v3-0_A2.trim.csv \
-  && gzip ref/GSA-24v3-0_A2.trim.csv
+  >> ref/GSA-24v3-0_A2.trim.csv
 
 # now copy the references into the final image
 # do this to use docker layer caching to cache the downloaded reference information
