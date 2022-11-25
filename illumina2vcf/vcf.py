@@ -151,6 +151,8 @@ class VCFMaker:
                 locus_records = self._indel_records[(chm, pos)]
 
                 (ref, alt) = self.get_alleles_for_indel(locus_records[0])
+
+                # check the other lotus records have the same reference + alternative alleles
                 for alt_record in locus_records[1:]:
                     if (ref, alt) != self.get_alleles_for_indel(alt_record):
                         raise ConverterError(
@@ -158,6 +160,10 @@ class VCFMaker:
                         )
                 # Illumina position is the position of the insertion (ie; one base after the ref allele)
                 # We want the position of the start of the ref allele, so we need to reduce pos by 1
+
+                # alt column in VCF is a list
+                alt = (alt,)
+
                 pos -= 1
 
             else:
@@ -169,6 +175,7 @@ class VCFMaker:
                     calls[sampleid], locus_records[0].is_deletion
                 )
         else:
+            # SNPs
             # handle ref/alt split
             if ref not in probed:
                 raise ConverterError(
@@ -177,6 +184,7 @@ class VCFMaker:
             probed.remove(ref)
 
             # alt may not be used, but is what the microarray could check for
+            # alt column in VCF is a list
             alt = tuple(sorted(probed))
 
             # convert calls

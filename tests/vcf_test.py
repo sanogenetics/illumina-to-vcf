@@ -78,7 +78,7 @@ class TestVCF:
         assert maxref == 1
         assert maxalt == 1
 
-    def disabled_test_data_indel(self, blocks, genome_reader, indel_records):
+    def test_data_indel(self, blocks, genome_reader, indel_records):
         """
         GIVEN an interable of blocks and indel data
         """
@@ -103,10 +103,5 @@ class TestVCF:
             assert len(line.sample) == 1
             maxref = max(maxref, len(line.ref))
             maxalt = max(maxalt, max((len(i) for i in line.alt)))
-
-            if len(line.ref) != 1:
-                print(str(line))
-            if max((len(i) for i in line.alt)) != 1:
-                print(str(line))
         assert maxref > 1
         assert maxalt > 1

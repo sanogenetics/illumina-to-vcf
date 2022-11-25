@@ -22,15 +22,16 @@ class CSVManifestReader:
         "addressb_id",
         "allelea_probeseq",
     )
+    source_filename: str
 
-    def __init__(self, csv_file: str, genome_reader: ReferenceGenome):
+    def __init__(self, csv_filename: str, genome_reader: ReferenceGenome):
         """
         Initialize a manifest reader from a CSV file
 
-            csv_file (string): Path to the CSV manifest
-            genome_reader (ReferenceGenome,CachedReferenceGenome)
+            csv_filename    Path to the CSV manifest
+            genome_reader   Reference genome reader
         """
-        self.source_file = csv_file
+        self.source_filename = csv_filename
         self._genome_reader = genome_reader
 
     def get_bpm_records(self):
@@ -44,7 +45,7 @@ class CSVManifestReader:
         """
         in_data = False
         idx = -1
-        for line in open(self.source_file):
+        for line in open(self.source_filename):
             if line.startswith("IlmnID,"):
                 in_data = True
                 header = line.rstrip().lower().split(",")
