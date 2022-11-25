@@ -1,5 +1,4 @@
 import csv
-import gzip
 import random
 from dataclasses import dataclass
 from datetime import datetime
@@ -32,7 +31,7 @@ class IlluminaBuilder:
         return self
 
     def _generate_probes(self) -> Generator[Probe, None, None]:
-        with gzip.open("tests/data/GSA-24v3-0_A2.trim.csv.gz", "rt") as infile:
+        with open("tests/data/GSA-24v3-0_A2.trim.csv", "rt") as infile:
             # read through the header
             for line in infile:
                 if line.strip() == "[Assay]":
