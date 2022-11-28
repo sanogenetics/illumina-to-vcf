@@ -1,142 +1,43 @@
-from collections import defaultdict
+import logging
+from typing import Dict, FrozenSet, Iterable, Tuple
 
 from .BPMRecord import BPMRecord, IndelSourceSequence
-from .IlluminaBeadArrayFiles import BeadPoolManifest, RefStrand
+from .IlluminaBeadArrayFiles import RefStrand
+from .ReferenceGenome import ReferenceGenome
+
+logger = logging.getLogger(__name__)
 
 
-class BPMReader(object):
-    """
-    Get records from a BPM manifest file
-    Attributes:
-        source_file (string) : Source file used to create reader
-    """
+class CSVManifestReader:
+    _genome_reader: ReferenceGenome
+    _required_columns = (
+        "sourcestrand",
+        "ilmnstrand",
+        "name",
+        "chr",
+        "mapinfo",
+        "refstrand",
+        "sourceseq",
+        "snp",
+        "addressb_id",
+        "allelea_probeseq",
+    )
+    source_filename: str
 
-    def __init__(self, bpm_file, logger):
-        """
-        Initialize a BPM reader with a file path
-        Args:
-            bpm_file (string): Path to the BPM manifest
-            logger (Logger) : A logger
-        Returns:
-            BeadPoolReader
-        """
-        self.source_file = bpm_file
-        self._bpm = BeadPoolManifest(bpm_file)
-        self._logger = logger
-
-    def get_bpm_records(self):
-        """
-        Get BPM records from the reader
-        Args:
-            None
-        Yields:
-            BPMRecord: Next BPMRecord in the file
-        """
-        bpm = self._bpm
-        for idx in range(len(bpm.addresses)):
-            yield BPMRecord(
-                bpm.names[idx],
-                bpm.addresses[idx],
-                None,
-                bpm.chroms[idx],
-                bpm.map_infos[idx],
-                bpm.snps[idx],
-                bpm.ref_strands[idx],
-                bpm.assay_types[idx],
-                None,
-                None,
-                None,
-                None,
-                idx,
-                self._logger,
-            )
-
-
-class ManifestFilter(object):
-    """
-    Filter entries from another manifest reader
-    Attributes:
-        source_file (string) : The file used a source for records
-    """
-
-    def __init__(self, manifest_reader, loci_to_filter, skip_snps, logger):
-        """
-        Return a new ManifestFilter. Will skip records as specified in constructor
-        as well as records with chromosome or mapping of zero.
-        Args:
-            manifest_reader (CSVManifestReader/BPMReader) : The source of BPM records
-            loci_to_filter (set(string)) : A set of record names to skip, may be None
-            skip_snps (bool) : Skip SNPs
-            logger (Logger) : logger
-        Returns:
-            ManifestFilter
-        """
-        self._manifest_reader = manifest_reader
-        self._loci_to_filter = loci_to_filter
-        self._skip_snps = skip_snps
-        self._logger = logger
-        self.source_file = manifest_reader.source_file
-        self.filtered_records = self.get_bpm_records
-
-    def get_bpm_records(self):
-        filtered_records = {}
-        for record in self._manifest_reader.get_bpm_records():
-            chrom = record.chromosome
-            if chrom == "XX" or chrom == "XY":
-                chrom = "X"
-            if chrom == "0" or record.pos == 0:
-                continue
-            # force chr prefix
-            if not chrom.startswith("chr"):
-                chrom = f"chr{chrom}"
-            if self._loci_to_filter and record.name in self._loci_to_filter:
-                continue
-            if not record.is_indel() and self._skip_snps:
-                continue
-            if not chrom in filtered_records:
-                filtered_records[chrom] = defaultdict(list)
-            filtered_records[chrom][record.pos].append(record)
-        return filtered_records
-
-
-class CSVManifestReader(object):
-    """
-    Get records from a CSV manifest
-    Attributes:
-        source_file (string) : Source file used to create reader
-    """
-
-    def __init__(self, csv_file, genome_reader, logger):
+    def __init__(self, csv_filename: str, genome_reader: ReferenceGenome):
         """
         Initialize a manifest reader from a CSV file
-        Args:
-            csv_file (string): Path to the CSV manifest
-            genome_reader (ReferenceGenome,CachedReferenceGenome)
-            logger (logging.Logger): Logger for reporting logging information
-        Returns:
-            CSVManifestReader
+
+            csv_filename    Path to the CSV manifest
+            genome_reader   Reference genome reader
         """
-        self.source_file = csv_file
-        self._required_columns = (
-            "sourcestrand",
-            "ilmnstrand",
-            "name",
-            "chr",
-            "mapinfo",
-            "refstrand",
-            "sourceseq",
-            "snp",
-            "addressb_id",
-            "allelea_probeseq",
-        )
+        self.source_filename = csv_filename
         self._genome_reader = genome_reader
-        self._logger = logger
 
     def get_bpm_records(self):
         """
         Get BPM records from the reader
-        Args:
-            None
+
         Yields:
             BPMRecord: Next BPMRecord in the file
         Raises:
@@ -144,7 +45,7 @@ class CSVManifestReader(object):
         """
         in_data = False
         idx = -1
-        for line in open(self.source_file):
+        for line in open(self.source_filename):
             if line.startswith("IlmnID,"):
                 in_data = True
                 header = line.rstrip().lower().split(",")
@@ -184,10 +85,10 @@ class CSVManifestReader(object):
                 try:
                     yield BPMRecord(
                         name,
-                        0,
+                        "0",
                         probe_a,
                         chrom,
-                        map_info,
+                        int(map_info),
                         snp,
                         RefStrand.from_string(ref_strand),
                         assay_type,
@@ -196,7 +97,53 @@ class CSVManifestReader(object):
                         ilmn_strand,
                         self._genome_reader,
                         idx,
-                        self._logger,
                     )
                 except Exception as error:
-                    self._logger.warn("Failed to process entry for record %s: %s", name, str(error))
+                    logger.warning("Failed to process entry for record %s: %s", name, str(error))
+
+
+class ManifestFilter:
+    manifest_reader: CSVManifestReader
+    loci_to_filter: FrozenSet[str]
+    skip_snps: bool
+
+    def __init__(self, manifest_reader: CSVManifestReader, loci_to_filter: Iterable[str], skip_snps: bool = False):
+        """
+        Return a new ManifestFilter. Will skip records as specified in constructor
+        as well as records with chromosome or mapping of zero.
+
+            manifest_reader     The source of BPM records
+            loci_to_filter      A set of record names to skip, may be None
+            skip_snps           Skip SNPs
+        """
+        self.manifest_reader = manifest_reader
+        self.loci_to_filter = frozenset(loci_to_filter)
+        self.skip_snps = skip_snps
+
+    def filtered_records(self) -> Dict[Tuple[str, int], BPMRecord]:
+        filtered_records = {}
+        for record in self.manifest_reader.get_bpm_records():
+
+            if record.chromosome == "0" or record.pos == 0:
+                continue
+
+            if self.loci_to_filter and record.name in self.loci_to_filter:
+                continue
+
+            if not record.is_indel() and self.skip_snps:
+                continue
+
+            chrom = record.chromosome
+            # sex cleanup
+            if chrom == "XX" or chrom == "XY":
+                chrom = "X"
+            # force chr prefix
+            if not chrom.startswith("chr"):
+                chrom = f"chr{chrom}"
+
+            # store it
+            if (chrom, record.pos) not in filtered_records:
+                filtered_records[(chrom, record.pos)] = []
+            filtered_records[(chrom, record.pos)].append(record)
+
+        return filtered_records

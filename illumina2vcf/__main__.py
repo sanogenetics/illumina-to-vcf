@@ -23,13 +23,12 @@ if __name__ == "__main__":
     parser.add_argument("--manifest", default="", help="path to Bead Pool Manifest file (csv format)")
     args = parser.parse_args()
 
-    reference = args.fasta
-    reference_fai = reference + ".fai"
-    if reference.startswith("s3://"):
-        reference = fsspec.open(reference)
-        reference_fai = fsspec.open(reference_fai)
-
-    converter = Converter(reference, reference_fai, args.blocklist, args.manifest, args.delim)
+    if args.fasta.startswith("s3://"):
+        converter = Converter(
+            fsspec.open(args.fasta), fsspec.open(args.fasta + ".fai"), args.blocklist, args.manifest, args.delim
+        )
+    else:
+        converter = Converter(args.fasta, args.fasta + ".fai", args.blocklist, args.manifest, args.delim)
 
     # read from stdin as uncompressed text
     # write to stdout as uncompressed vcf

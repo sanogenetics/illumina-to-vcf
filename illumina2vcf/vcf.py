@@ -1,13 +1,12 @@
-import csv
 import logging
 import re
-from typing import Dict, Generator, Iterable, List, Tuple, Union
+from typing import Dict, Generator, Iterable, List, Tuple
 
-from fsspec.core import OpenFile
 from puretabix.vcf import VCFLine
-from pyfaidx import Fasta
 
+from .bpm.BPMRecord import BPMRecord
 from .bpm.IlluminaBeadArrayFiles import RefStrand
+from .bpm.ReferenceGenome import ReferenceGenome
 from .illumina import ALLELE1, ALLELE2, SAMPLE_ID, SNP, SNP_NAME, STRAND
 
 STRANDSWAP = {"A": "T", "T": "A", "C": "G", "G": "C", "I": "I", "D": "D"}
@@ -20,19 +19,16 @@ class ConverterError(Exception):
 
 
 class VCFMaker:
+    _genome_reader: ReferenceGenome
+    _indel_records: Dict
 
-    reference: Union[str, OpenFile]
-    reference_index: Union[str, OpenFile]
-    reference_fasta: Fasta
-    _buildsizes: Dict[str, str] = {}
-
-    def __init__(self, genome_reader, indel_records) -> None:
+    def __init__(self, genome_reader: ReferenceGenome, indel_records: Dict = {}):
         self._genome_reader = genome_reader
         self._indel_records = indel_records
 
     @staticmethod
-    def is_valid_chromosome(chrom: str):
-        return re.match(r"^chr[1-9XYM][0-9]?$", chrom)
+    def is_valid_chromosome(chrom: str) -> bool:
+        return bool(re.match(r"^chr[1-9XYM][0-9]?$", chrom))
 
     def generate_header(self, date: str, source: str, buildname: str) -> Generator[VCFLine, None, None]:
         # write header
@@ -62,7 +58,7 @@ class VCFMaker:
                     {"ID": chrom, "length": rec.rlen, "assembly": buildname},
                 )
 
-    def generate_lines(self, blocks) -> Generator[VCFLine, None, None]:
+    def generate_lines(self, blocks: Iterable[List[Dict[str, str]]]) -> Generator[VCFLine, None, None]:
         column_header = False
         samples: List[str] = []
         for block in blocks:
@@ -142,6 +138,9 @@ class VCFMaker:
         pos = int(block[0]["Position"])
 
         ref = self._genome_reader.get_reference_bases(chm, pos - 1, pos)
+        if not ref:
+            raise ConverterError(f"Unable to get reference {chm}:{pos-1}-{pos}")
+
         converted_calls = {}
         # handel indels
         if "I" in probed or "D" in probed:
@@ -149,9 +148,14 @@ class VCFMaker:
                 raise ConverterError(
                     f"{';'.join(snp_names)}: contains indels and SNPs ({','.join(probed)}) {block[0]['Chr']}:{block[0]['Position']}"
                 )
-            try:
-                locus_records = self._indel_records[chm][pos]
+
+            if (chm, pos) in self._indel_records:
+                # get the records in the manifest for this locaion
+                locus_records = self._indel_records[(chm, pos)]
+
                 (ref, alt) = self.get_alleles_for_indel(locus_records[0])
+
+                # check the other lotus records have the same reference + alternative alleles
                 for alt_record in locus_records[1:]:
                     if (ref, alt) != self.get_alleles_for_indel(alt_record):
                         raise ConverterError(
@@ -159,9 +163,13 @@ class VCFMaker:
                         )
                 # Illumina position is the position of the insertion (ie; one base after the ref allele)
                 # We want the position of the start of the ref allele, so we need to reduce pos by 1
+
+                # alt column in VCF is a list
+                alt = (alt,)
+
                 pos -= 1
 
-            except KeyError:
+            else:
                 raise ConverterError(
                     f"{';'.join(snp_names)}: No BPM record for indel ({','.join(probed)}) {block[0]['Chr']}:{block[0]['Position']}"
                 )
@@ -170,6 +178,7 @@ class VCFMaker:
                     calls[sampleid], locus_records[0].is_deletion
                 )
         else:
+            # SNPs
             # handle ref/alt split
             if ref not in probed:
                 raise ConverterError(
@@ -178,6 +187,7 @@ class VCFMaker:
             probed.remove(ref)
 
             # alt may not be used, but is what the microarray could check for
+            # alt column in VCF is a list
             alt = tuple(sorted(probed))
 
             # convert calls
@@ -188,7 +198,9 @@ class VCFMaker:
                 elif allele1 == ref:
                     allele1n = "0"
                 elif allele1 not in alt:
-                    raise ConverterError(f"Unexpected forward {block[0]['Chr']}:{block[0]['Position']}")
+                    raise ConverterError(
+                        f"Unexpected forward {block[0]['Chr']}:{block[0]['Position']} {allele1} vs {ref}/{alt}"
+                    )
                 else:
                     allele1n = str(1 + alt.index(allele1))
 
@@ -198,7 +210,9 @@ class VCFMaker:
                 elif allele2 == ref:
                     allele2n = "0"
                 elif allele2 not in alt:
-                    raise ConverterError(f"Unexpected forward {block[0]['Chr']}:{block[0]['Position']}")
+                    raise ConverterError(
+                        f"Unexpected forward {block[0]['Chr']}:{block[0]['Position']} {allele2} vs {ref}/{alt}"
+                    )
                 else:
                     allele2n = str(1 + alt.index(allele2))
 
@@ -215,13 +229,13 @@ class VCFMaker:
 
         return vcfline
 
-    def get_alleles_for_indel(self, bpm_record):
+    def get_alleles_for_indel(self, bpm_record: BPMRecord):
         """
             Determine REF and ALT alleles for indel manifest record
             Args:
                bpm_record: BPM record for indel
         Returns:
-            tupple of REF and ALT alleles
+            tuple of REF and ALT alleles
         """
 
         (_, indel_sequence, _) = bpm_record.get_indel_source_sequences(RefStrand.Plus)

@@ -11,6 +11,8 @@ RUN curl "https://storage.googleapis.com/genomics-public-data/resources/broad/hg
 RUN curl "https://storage.googleapis.com/genomics-public-data/resources/broad/hg38/v0/Homo_sapiens_assembly38.fasta.fai" \
   -o "ref/Homo_sapiens_assembly38.fasta.fai"
 
+RUN curl "https://sano-public.s3.eu-west-2.amazonaws.com/GSA-24v3-0_A2.csv.gz" \
+  -o ref/GSA-24v3-0_A2.csv.gz
 
 # now copy the references into the final image
 # do this to use docker layer caching to cache the downloaded reference information
@@ -22,6 +24,8 @@ RUN mkdir ref
 
 COPY --from=ref /app/ref/Homo_sapiens_assembly38.fasta ref/Homo_sapiens_assembly38.fasta
 COPY --from=ref /app/ref/Homo_sapiens_assembly38.fasta.fai ref/Homo_sapiens_assembly38.fasta.fai
+
+COPY --from=ref /app/ref/GSA-24v3-0_A2.csv.gz ref/GSA-24v3-0_A2.csv.gz
 
 # install reference extras
 COPY ref/GSAMD-24v3-0-EA_20034606_A2_blocklist.txt ref/
