@@ -138,6 +138,9 @@ class VCFMaker:
         pos = int(block[0]["Position"])
 
         ref = self._genome_reader.get_reference_bases(chm, pos - 1, pos)
+        if not ref:
+            raise ConverterError(f"Unable to get reference {chm}:{pos-1}-{pos}")
+
         converted_calls = {}
         # handel indels
         if "I" in probed or "D" in probed:
