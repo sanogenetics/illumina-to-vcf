@@ -1,6 +1,6 @@
+import gzip
 import logging
-from io import TextIOBase
-from typing import Iterable, Union
+from typing import Iterable, TextIO, Union
 
 from fsspec.core import OpenFile
 
@@ -35,13 +35,16 @@ class Converter:
         self.delimiter = delimiter
         self.buildname = buildname
 
-    def convert(self, source: Iterable[str], destination: TextIOBase) -> None:
+    def convert(self, source: Iterable[str], destination: TextIO) -> None:
         reader = IlluminaReader(self.delimiter, self.blocklist_filename)
 
         genome_reader = ReferenceGenome(self.reference, self.reference_index)
         if self.manifest_filename:
-            manifest_reader = CSVManifestReader(self.manifest_filename, genome_reader)
-            indel_records = ManifestFilter(manifest_reader, frozenset(), skip_snps=True).filtered_records()
+            if self.manifest_filename.endswith(".gz"):
+                manifest_reader = CSVManifestReader(gzip.open(self.manifest_filename, "rt"), genome_reader)
+            else:
+                manifest_reader = CSVManifestReader(open(self.manifest_filename, "rt"), genome_reader)
+            indel_records = ManifestFilter(frozenset(), skip_snps=True).filtered_records(manifest_reader)
         else:
             indel_records = {}
         vcfgenerator = VCFMaker(genome_reader, indel_records)
