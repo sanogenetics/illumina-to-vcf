@@ -1,17 +1,17 @@
+import gzip
 from typing import Dict, List, Tuple
 
-from pytest import fixture
+from pytest import fixture, mark
 
 from illumina2vcf import IlluminaReader, VCFMaker
 from illumina2vcf.bpm.BPMReader import CSVManifestReader, ManifestFilter
-from illumina2vcf.bpm.BPMRecord import BPMRecord
 from illumina2vcf.bpm.ReferenceGenome import ReferenceGenome
 
 from .conftest import IlluminaBuilder
 
 
 @fixture
-def blocks() -> tuple[List[Dict[str, str]], ...]:
+def blocks() -> Tuple[List[Dict[str, str]], ...]:
     reader = IlluminaReader("\t")
     illumina = IlluminaBuilder().build_file()
     _, _ = reader.parse_header(illumina)
@@ -24,13 +24,6 @@ def genome_reader() -> ReferenceGenome:
     return ReferenceGenome(
         "tests/data/Homo_sapiens_assembly38.trim.fasta", "tests/data/Homo_sapiens_assembly38.trim.fasta.fai"
     )
-
-
-@fixture
-def indel_records(genome_reader) -> Dict[Tuple[str, int], BPMRecord]:
-    return ManifestFilter(
-        CSVManifestReader("tests/data/GSA-24v3-0_A2.trim.csv", genome_reader), frozenset(), skip_snps=True
-    ).filtered_records()
 
 
 class TestVCF:
@@ -78,10 +71,21 @@ class TestVCF:
         assert maxref == 1
         assert maxalt == 1
 
-    def test_data_indel(self, blocks, genome_reader, indel_records):
+    @mark.parametrize(
+        "manifest_file",
+        [
+            open("tests/data/GSA-24v3-0_A2.trim.csv", "rt"),
+            gzip.open("tests/data/GSA-24v3-0_A2.trim.csv.gz", "rt"),
+        ],
+        ids=["txt", "gz"],
+    )
+    def test_data_indel(self, blocks, genome_reader, manifest_file):
         """
         GIVEN an interable of blocks and indel data
         """
+        indel_records = ManifestFilter(frozenset(), skip_snps=True).filtered_records(
+            CSVManifestReader(manifest_file, genome_reader)
+        )
         vcfgenerator = VCFMaker(genome_reader, indel_records)
         """
         GIVEN a VCF generator

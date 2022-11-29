@@ -18,7 +18,8 @@ RUN gunzip -c ref/GSA-24v3-0_A2.csv.gz | head -n 8 > ref/GSA-24v3-0_A2.trim.csv 
   && gunzip -c ref/GSA-24v3-0_A2.csv.gz \
   | grep -E '(,38,1,)|(,38,2,)|(,38,10,)|(,38,X,)|(,38,Y,)' \
   | awk -F',' '$11<3000000' \
-  >> ref/GSA-24v3-0_A2.trim.csv
+  | gzip \
+  >> ref/GSA-24v3-0_A2.trim.csv.gz
 
 # now copy the references into the final image
 # do this to use docker layer caching to cache the downloaded reference information
@@ -31,7 +32,7 @@ RUN mkdir ref
 COPY --from=ref /app/ref/Homo_sapiens_assembly38.trim.fasta ref/Homo_sapiens_assembly38.fasta
 COPY --from=ref /app/ref/Homo_sapiens_assembly38.trim.fasta.fai ref/Homo_sapiens_assembly38.fasta.fai
 
-COPY --from=ref /app/ref/GSA-24v3-0_A2.trim.csv.gz ref/GSA-24v3-0_A2.trim.csv.gz
+COPY --from=ref /app/ref/GSA-24v3-0_A2.trim.csv.gz ref/GSA-24v3-0_A2.csv.gz
 
 # install reference extras
 COPY ref/GSAMD-24v3-0-EA_20034606_A2_blocklist.txt ref/

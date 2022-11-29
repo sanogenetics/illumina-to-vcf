@@ -22,16 +22,16 @@ class CSVManifestReader:
         "addressb_id",
         "allelea_probeseq",
     )
-    source_filename: str
+    _source_file: str
 
-    def __init__(self, csv_filename: str, genome_reader: ReferenceGenome):
+    def __init__(self, csv_source: Iterable[str], genome_reader: ReferenceGenome):
         """
-        Initialize a manifest reader from a CSV file
+        Initialize a manifest reader from a CSV file or other string iterable
 
             csv_filename    Path to the CSV manifest
             genome_reader   Reference genome reader
         """
-        self.source_filename = csv_filename
+        self._source = csv_source
         self._genome_reader = genome_reader
 
     def get_bpm_records(self):
@@ -45,7 +45,8 @@ class CSVManifestReader:
         """
         in_data = False
         idx = -1
-        for line in open(self.source_filename):
+        for line in self._source:
+
             if line.startswith("IlmnID,"):
                 in_data = True
                 header = line.rstrip().lower().split(",")
@@ -56,6 +57,7 @@ class CSVManifestReader:
                     except:
                         raise Exception("Manifest is missing required column " + required_column)
                 continue
+
             if line.startswith("[Controls]"):
                 in_data = False
                 continue
@@ -103,11 +105,10 @@ class CSVManifestReader:
 
 
 class ManifestFilter:
-    manifest_reader: CSVManifestReader
     loci_to_filter: FrozenSet[str]
     skip_snps: bool
 
-    def __init__(self, manifest_reader: CSVManifestReader, loci_to_filter: Iterable[str], skip_snps: bool = False):
+    def __init__(self, loci_to_filter: Iterable[str], skip_snps: bool = False):
         """
         Return a new ManifestFilter. Will skip records as specified in constructor
         as well as records with chromosome or mapping of zero.
@@ -116,13 +117,12 @@ class ManifestFilter:
             loci_to_filter      A set of record names to skip, may be None
             skip_snps           Skip SNPs
         """
-        self.manifest_reader = manifest_reader
         self.loci_to_filter = frozenset(loci_to_filter)
         self.skip_snps = skip_snps
 
-    def filtered_records(self) -> Dict[Tuple[str, int], BPMRecord]:
+    def filtered_records(self, manifest_reader: CSVManifestReader) -> Dict[Tuple[str, int], BPMRecord]:
         filtered_records = {}
-        for record in self.manifest_reader.get_bpm_records():
+        for record in manifest_reader.get_bpm_records():
 
             if record.chromosome == "0" or record.pos == 0:
                 continue
