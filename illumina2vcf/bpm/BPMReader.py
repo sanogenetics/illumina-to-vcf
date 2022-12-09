@@ -146,4 +146,6 @@ class ManifestFilter:
                 filtered_records[(chrom, record.pos)] = []
             filtered_records[(chrom, record.pos)].append(record)
 
+        logger.info(f"Got {len(filtered_records)} records")
+        assert filtered_records
         return filtered_records
