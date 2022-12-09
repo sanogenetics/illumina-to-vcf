@@ -41,8 +41,10 @@ class Converter:
         genome_reader = ReferenceGenome(self.reference, self.reference_index)
         if self.manifest_filename:
             if self.manifest_filename.endswith(".gz"):
+                logger.info(f"Reading gzip compressed manifest {self.manifest_filename}")
                 manifest_reader = CSVManifestReader(gzip.open(self.manifest_filename, "rt"), genome_reader)
             else:
+                logger.info(f"Reading uncompressed manifest {self.manifest_filename}")
                 manifest_reader = CSVManifestReader(open(self.manifest_filename, "rt"), genome_reader)
             indel_records = ManifestFilter(frozenset(), skip_snps=True).filtered_records(manifest_reader)
         else:
