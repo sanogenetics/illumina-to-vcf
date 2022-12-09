@@ -14,12 +14,11 @@ RUN samtools faidx ref/Homo_sapiens_assembly38.trim.fasta
 # reduce manifest file in the same way
 # keep the header
 # filter only to specific chrom,pos
-RUN gunzip -c ref/GSA-24v3-0_A2.csv.gz | head -n 8 > ref/GSA-24v3-0_A2.trim.csv \
+RUN gunzip -c ref/GSA-24v3-0_A2.csv.gz | head -n 8 >ref/GSA-24v3-0_A2.trim.csv \
   && gunzip -c ref/GSA-24v3-0_A2.csv.gz \
   | grep -E '(,38,1,)|(,38,2,)|(,38,10,)|(,38,X,)|(,38,Y,)' \
-  | awk -F',' '$11<3000000' \
-  | gzip \
-  >> ref/GSA-24v3-0_A2.trim.csv.gz
+  | awk -F',' '$11<3000000' >>ref/GSA-24v3-0_A2.trim.csv\
+  && gzip ref/GSA-24v3-0_A2.trim.csv
 
 # now copy the references into the final image
 # do this to use docker layer caching to cache the downloaded reference information

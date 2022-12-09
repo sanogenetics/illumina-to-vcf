@@ -96,6 +96,13 @@ class TestVCF:
         """
         THEN it should produce valid output
         """
+
+        # pick out some specific ones that we know what to expect
+        rsidlines = {
+            "rs9651229": None,  # SNP
+            "rs797044837": None,  # deletion
+            "rs61750435": None,  # insertion
+        }
         maxref = 0
         maxalt = 0
         for line in lines:
@@ -107,5 +114,13 @@ class TestVCF:
             assert len(line.sample) == 1
             maxref = max(maxref, len(line.ref))
             maxalt = max(maxalt, max((len(i) for i in line.alt)))
+
+            if line._id[0] in rsidlines.keys():
+                rsid = line._id[0]
+                assert not rsidlines[rsid]
+                rsidlines[rsid] = line
         assert maxref > 1
         assert maxalt > 1
+
+        for key in rsidlines:
+            assert rsidlines[key]
