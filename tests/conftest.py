@@ -20,6 +20,7 @@ class Probe:
 
 class IlluminaBuilder:
     _sano: bool = False
+    _sorted: bool = True
     _rng: random.Random
 
     def __init__(self):
@@ -28,6 +29,10 @@ class IlluminaBuilder:
 
     def sano(self, sano: bool) -> "IlluminaBuilder":
         self._sano = sano
+        return self
+
+    def sorted(self, sorted: bool) -> "IlluminaBuilder":
+        self._sorted = sorted
         return self
 
     def _generate_probes(self) -> Generator[Probe, None, None]:
@@ -56,6 +61,17 @@ class IlluminaBuilder:
                 return (probe.chrom, 0, probe.pos)
 
         return sorted(self._generate_probes(), key=probekey)
+
+    def _generate_unsorted_probes(self) -> List[Probe]:
+        # convert positions to string before sorting so that they will be out of
+        # order (this assumes that there are positions with different numbers of digits)
+        def str_probekey(probe: Probe) -> Tuple[str, int, int]:
+            if probe.chrom.isnumeric():
+                return ("", int(probe.chrom), str(probe.pos))
+            else:
+                return (probe.chrom, 0, str(probe.pos))
+
+        return sorted(self._generate_probes(), key=str_probekey)
 
     def _generate_header_lines(self, num_snps=730059, num_samples=24):
         yield "[Header]"
@@ -135,7 +151,10 @@ class IlluminaBuilder:
     def _generate_lines(self, samples=["sample1"]):
         # first generate the probes
         # make sure they are sorted by chromosome and position
-        probes = self._generate_sorted_probes()
+        if self._sorted:
+            probes = self._generate_sorted_probes()
+        else:
+            probes = self._generate_unsorted_probes()
         # now we know how many probes and how many samples we have can generate header
         for line in self._generate_header_lines(num_snps=len(probes), num_samples=len(samples)):
             yield line

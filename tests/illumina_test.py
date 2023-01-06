@@ -42,10 +42,31 @@ Total Samples	24"""
     @pytest.mark.parametrize("sano", (False, True))
     def test_generate_blocks(self, sano: bool) -> None:
         """
-        GIVEN an illumina file and reader
+        GIVEN an illumina sorted file and reader
         """
         reader = IlluminaReader("\t")
         illumina = IlluminaBuilder().sano(sano).build_file()
+
+        """
+        WHEN it is parsed
+        """
+        _, _ = reader.parse_header(illumina)
+        blocks = tuple(reader.generate_line_blocks(illumina))
+
+        """
+        THEN it should have blocks of lines
+        """
+        assert len(blocks) > 0
+        for block in blocks:
+            assert len(block) > 0
+
+    @pytest.mark.parametrize("sano", (False, True))
+    def test_block_sorting(self, sano: bool) -> None:
+        """
+        GIVEN an illumina unsorted file and reader
+        """
+        reader = IlluminaReader("\t")
+        illumina = IlluminaBuilder().sano(sano).sorted(False).build_file()
 
         """
         WHEN it is parsed
