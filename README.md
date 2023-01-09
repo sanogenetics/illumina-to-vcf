@@ -160,7 +160,7 @@ Push to AWS ECR with:
 aws ecr get-login-password --region eu-west-2 | docker login --username AWS --password-stdin 244834673510.dkr.ecr.eu-west-2.amazonaws.com
 docker tag illumina2vcf:latest 244834673510.dkr.ecr.eu-west-2.amazonaws.com/illumina2vcf:latest
 docker push 244834673510.dkr.ecr.eu-west-2.amazonaws.com/illumina2vcf:latest
-docker tag illumina2vcf:latest-test-ref 244834673510.dkr.ecr.eu-west-2.amazonaws.com/illumina2vcf:latest-ref
+docker tag illumina2vcf:latest-ref 244834673510.dkr.ecr.eu-west-2.amazonaws.com/illumina2vcf:latest-ref
 docker push 244834673510.dkr.ecr.eu-west-2.amazonaws.com/illumina2vcf:latest-ref
 docker tag illumina2vcf:latest-test-ref 244834673510.dkr.ecr.eu-west-2.amazonaws.com/illumina2vcf:latest-test-ref
 docker push 244834673510.dkr.ecr.eu-west-2.amazonaws.com/illumina2vcf:latest-test-ref
