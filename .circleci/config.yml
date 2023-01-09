@@ -10,9 +10,9 @@ jobs:
         auth:
           username: $DOCKERHUB_USERNAME # context environment variable reference
           password: $DOCKERHUB_PASSWORD # context environment variable reference
-    # 1vCPU & 2GB = small is too small
+    # 1vCPU & 2GB = small
     # 2vCPU & 4GB = medium
-    resource_class: medium
+    resource_class: small
     steps:
       - checkout
       - run:
@@ -38,19 +38,31 @@ jobs:
 
       - codecov/upload
 
+  dockerhub_publish:
+    docker:
+      # specify the version you desire here
+      - image: cimg/python:3.9
+        auth:
+          username: $DOCKERHUB_USERNAME # context environment variable reference
+          password: $DOCKERHUB_PASSWORD # context environment variable reference
+    # 1vCPU & 2GB = small is too small for reference data
+    # 2vCPU & 4GB = medium
+    resource_class: medium
+    steps:
+      - checkout
+      - setup_remote_docker:
+          version: 20.10.14
+          docker_layer_caching: true
+      - run:
+          name: Build Docker images
+          command: |
+            docker/build.sh
       - when:
           condition:
-            equal: [ "master", << pipeline.git.branch >> ]
+            equal: [main, << pipeline.git.branch >>]
           steps:
-            - setup_remote_docker:
-                version: 20.10.14
-                docker_layer_caching: true
             - run:
-                name: Build Docker images
-                command: |
-                  docker/build.sh
-            - run:
-                name: Push to Dockerhub
+                name: Push to Dockerhub latest
                 command: |
                   docker logout
                   docker login --username sanogenetics --password $DOCKERHUB_PASSWORD
@@ -61,8 +73,21 @@ jobs:
                   docker tag illumina2vcf:latest-test-ref sanogenetics/illumina2vcf:latest-test-ref
                   docker push sanogenetics/illumina2vcf:latest-test-ref
                   docker logout
-
-
+      - when:
+          condition: << pipeline.git.tag >>
+          steps:
+            - run:
+                name: Push to Dockerhub tag
+                command: |
+                  docker logout
+                  docker login --username sanogenetics --password $DOCKERHUB_PASSWORD
+                  docker tag illumina2vcf:latest sanogenetics/illumina2vcf:<< pipeline.git.tag >>
+                  docker push sanogenetics/illumina2vcf:<< pipeline.git.tag >>
+                  docker tag illumina2vcf:latest-ref sanogenetics/illumina2vcf:<< pipeline.git.tag >>-ref
+                  docker push sanogenetics/illumina2vcf:<< pipeline.git.tag >>-ref
+                  docker tag illumina2vcf:latest-test-ref sanogenetics/illumina2vcf:<< pipeline.git.tag >>-test-ref
+                  docker push sanogenetics/illumina2vcf:<< pipeline.git.tag >>-test-ref
+                  docker logout
 
 workflows:
   tests:
@@ -70,3 +95,12 @@ workflows:
       - pytest:
           context:
             - "docker_hub_creds"
+      - dockerhub_publish:
+          requires:
+            - pytest
+          filters:
+            branches:
+              only:
+                - main
+            tags:
+              only: /^[1-9][0-9]*\.[1-9][0-9]*\.[1-9][0-9]*$/
