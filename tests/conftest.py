@@ -22,6 +22,7 @@ class IlluminaBuilder:
     _sano: bool = False
     _sorted: bool = True
     _rng: random.Random
+    _data_header_full: bool = True
 
     def __init__(self):
         self._rng = random.Random(42)
@@ -33,6 +34,10 @@ class IlluminaBuilder:
 
     def sorted(self, sorted: bool) -> "IlluminaBuilder":
         self._sorted = sorted
+        return self
+
+    def data_header(self, data_header_full: bool) -> "IlluminaBuilder":
+        self._data_header_full = data_header_full
         return self
 
     def _generate_probes(self) -> Generator[Probe, None, None]:
@@ -93,42 +98,62 @@ class IlluminaBuilder:
             line_items.append(str(data.get(heading, ".")))
         return "\t".join(line_items)
 
+    def _generate_data_header(self) -> Tuple[str]:
+        if self._data_header_full:
+            return tuple(
+                (
+                    "Sample ID",
+                    "RsID",
+                    "GC Score",
+                    "SNP Name",
+                    "SNP Index",
+                    "Sample Index",
+                    "Sample Name",
+                    "Sample Group",
+                    "SNP Aux",
+                    "Chr",
+                    "Position",
+                    "GT Score",
+                    "Cluster Sep",
+                    "SNP",
+                    "ILMN Strand",
+                    "Customer Strand",
+                    "Top Genomic Sequence",
+                    "Plus/Minus Strand",
+                    "Allele1 - Plus",
+                    "Allele2 - Plus",
+                    "Allele1 - Forward",
+                    "Allele2 - Forward",
+                    "Theta",
+                    "R",
+                    "X",
+                    "Y",
+                    "X Raw",
+                    "Y Raw",
+                    "B Allele Freq",
+                    "Log R Ratio",
+                    "CNV Value",
+                    "CNV Confidence",
+                )
+            )
+        else:
+            return tuple(
+                (
+                    "Sample ID",
+                    "SNP Name",
+                    "Sample Name",
+                    "Chr",
+                    "Position",
+                    "SNP",
+                    "Plus/Minus Strand",
+                    "Allele1 - Plus",
+                    "Allele2 - Plus",
+                )
+            )
+
     def _generate_data_lines(self, samples, probes):
+        header = self._generate_data_header()
         yield "[Data]"
-        header = [
-            "Sample ID",
-            "RsID",
-            "GC Score",
-            "SNP Name",
-            "SNP Index",
-            "Sample Index",
-            "Sample Name",
-            "Sample Group",
-            "SNP Aux",
-            "Chr",
-            "Position",
-            "GT Score",
-            "Cluster Sep",
-            "SNP",
-            "ILMN Strand",
-            "Customer Strand",
-            "Top Genomic Sequence",
-            "Plus/Minus Strand",
-            "Allele1 - Plus",
-            "Allele2 - Plus",
-            "Allele1 - Forward",
-            "Allele2 - Forward",
-            "Theta",
-            "R",
-            "X",
-            "Y",
-            "X Raw",
-            "Y Raw",
-            "B Allele Freq",
-            "Log R Ratio",
-            "CNV Value",
-            "CNV Confidence",
-        ]
         yield "\t".join(header)
         for i, sample in enumerate(samples, 1):
             # TODO mark some as chr/pos 0/0

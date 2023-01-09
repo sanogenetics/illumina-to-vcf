@@ -39,13 +39,13 @@ Total Samples	24"""
         # source must be GSAMD-24v3-0-EA_20034606_A2.bpm
         assert source == "GSAMD-24v3-0-EA_20034606_A2"
 
-    @pytest.mark.parametrize("sano", (False, True))
-    def test_generate_blocks(self, sano: bool) -> None:
+    @pytest.mark.parametrize("sano,sorted,data_header", itertools.product((False, True), (True, False), (True, False)))
+    def test_generate_blocks(self, sano: bool, sorted: bool, data_header: bool) -> None:
         """
         GIVEN an illumina sorted file and reader
         """
         reader = IlluminaReader("\t")
-        illumina = IlluminaBuilder().sano(sano).build_file()
+        illumina = IlluminaBuilder().sano(sano).sorted(sorted).data_header(data_header).build_file()
 
         """
         WHEN it is parsed
@@ -59,26 +59,3 @@ Total Samples	24"""
         assert len(blocks) > 0
         for block in blocks:
             assert len(block) > 0
-
-    @pytest.mark.parametrize("sano", (False, True))
-    def test_block_sorting(self, sano: bool) -> None:
-        """
-        GIVEN an illumina unsorted file and reader
-        """
-        reader = IlluminaReader("\t")
-        illumina = IlluminaBuilder().sano(sano).sorted(False).build_file()
-
-        """
-        WHEN it is parsed
-        """
-        _, _ = reader.parse_header(illumina)
-        blocks = tuple(reader.generate_line_blocks(illumina))
-
-        """
-        THEN it should have blocks of lines
-        """
-        assert len(blocks) > 0
-        for block in blocks:
-            assert len(block) > 0
-
-        # TODO better tests here, more types of block, etc
