@@ -151,7 +151,7 @@ class IlluminaReader:
             row_minis.append(row_mini)
 
         # this might take some time
-        rows_mini_sorted = tuple(sorted(row_minis, key=lambda r: (r.sample_id, r.chrom, r.pos)))
+        rows_mini_sorted = tuple(sorted(row_minis, key=lambda r: (r.chrom, r.pos, r.sample_id)))
         return rows_mini_sorted
 
     def generate_line_blocks(self, input: Iterable[str]) -> Generator[List[IlluminaRow], None, None]:

@@ -1,4 +1,5 @@
 import itertools
+from typing import Iterable, Tuple
 
 import pytest
 
@@ -39,13 +40,21 @@ Total Samples	24"""
         # source must be GSAMD-24v3-0-EA_20034606_A2.bpm
         assert source == "GSAMD-24v3-0-EA_20034606_A2"
 
-    @pytest.mark.parametrize("sano,sorted,data_header", itertools.product((False, True), (True, False), (True, False)))
-    def test_generate_blocks(self, sano: bool, sorted: bool, data_header: bool) -> None:
+    @pytest.mark.parametrize(
+        "sano,sorted,data_header,samples",
+        itertools.product(
+            (False, True),
+            (True, False),
+            (True, False),
+            (("sample1",), ("sample1", "sample2")),
+        ),
+    )
+    def test_generate_blocks(self, sano: bool, sorted: bool, data_header: bool, samples: Tuple[str, ...]) -> None:
         """
-        GIVEN an illumina sorted file and reader
+        GIVEN an illumina file and reader
         """
         reader = IlluminaReader("\t")
-        illumina = IlluminaBuilder().sano(sano).sorted(sorted).data_header(data_header).build_file()
+        illumina = IlluminaBuilder().samples(samples).sano(sano).sorted(sorted).data_header(data_header).build_file()
 
         """
         WHEN it is parsed
@@ -59,3 +68,5 @@ Total Samples	24"""
         assert len(blocks) > 0
         for block in blocks:
             assert len(block) > 0
+            # each block should be fully divisible by the number of samples
+            assert len(block) % len(samples) == 0
