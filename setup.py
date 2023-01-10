@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name="illumina2vcf",
-    version="1.0.0",
+    version="1.1.0",
     author="Adam Faulconbridge",
     author_email="adam@sanogenetics.com",
     packages=["illumina2vcf"],
