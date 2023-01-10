@@ -113,6 +113,8 @@ workflows:
             tags:
               only: /^[1-9][0-9]*\.[0-9]+\.[0-9]+$/
       - dockerhub_publish:
+          context:
+            - "docker_hub_creds"
           requires:
             - pytest
           filters:
