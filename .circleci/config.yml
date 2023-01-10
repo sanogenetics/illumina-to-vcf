@@ -90,11 +90,28 @@ jobs:
                   docker logout
 
 workflows:
+  # This workflow will run on all branches except 'master' and will not run on tags
   tests:
     jobs:
       - pytest:
           context:
             - "docker_hub_creds"
+          filters:
+            branches:
+              ignore: master
+
+  # This workflow will run on 'master' branch OR will run on tags like 1.2.3
+  tests-and-deploy:
+    jobs:
+      - pytest:
+          context:
+            - "docker_hub_creds"
+          filters:
+            branches:
+              only:
+                - master
+            tags:
+              only: /^[1-9][0-9]*\.[0-9]+\.[0-9]+$/
       - dockerhub_publish:
           requires:
             - pytest
