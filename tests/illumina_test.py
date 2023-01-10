@@ -1,4 +1,5 @@
 import itertools
+from typing import Iterable, Tuple
 
 import pytest
 
@@ -39,13 +40,30 @@ Total Samples	24"""
         # source must be GSAMD-24v3-0-EA_20034606_A2.bpm
         assert source == "GSAMD-24v3-0-EA_20034606_A2"
 
-    @pytest.mark.parametrize("sano", (False, True))
-    def test_generate_blocks(self, sano: bool) -> None:
+    @pytest.mark.parametrize(
+        "sano,sorted,data_header,samples",
+        itertools.product(
+            (False, True),
+            (True, False),
+            (True, False),
+            (("sample1",), ("sample1", "sample2")),
+        ),
+        ids=[
+            "-".join(i)
+            for i in itertools.product(
+                ["GSA", "Sano"],
+                ["sorted", "unsorted"],
+                ["fullheader", "miniheader"],
+                ["1sample", "2sample"],
+            )
+        ],
+    )
+    def test_generate_blocks(self, sano: bool, sorted: bool, data_header: bool, samples: Tuple[str, ...]) -> None:
         """
         GIVEN an illumina file and reader
         """
         reader = IlluminaReader("\t")
-        illumina = IlluminaBuilder().sano(sano).build_file()
+        illumina = IlluminaBuilder().samples(samples).sano(sano).sorted(sorted).data_header(data_header).build_file()
 
         """
         WHEN it is parsed
@@ -59,5 +77,10 @@ Total Samples	24"""
         assert len(blocks) > 0
         for block in blocks:
             assert len(block) > 0
-
-        # TODO better tests here, more types of block, etc
+            # each block should be fully divisible by the number of samples
+            assert len(block) % len(samples) == 0
+            # all lines in a block should have the same chromosome and position
+            assert len(set((i.chrom for i in block))) == 1
+            assert len(set((i.pos for i in block))) == 1
+            # each line should have a unique sample and snp ids
+            assert len(set(((i.sample_id, i.snp_name) for i in block))) == len(block)

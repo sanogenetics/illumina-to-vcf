@@ -3,7 +3,7 @@ import random
 from dataclasses import dataclass
 from datetime import datetime
 from io import StringIO
-from typing import Generator, List, Tuple
+from typing import Any, Dict, Generator, Iterable, List, Tuple
 
 from illumina2vcf.bpm.BPMRecord import COMPLEMENT_MAP
 
@@ -20,14 +20,30 @@ class Probe:
 
 class IlluminaBuilder:
     _sano: bool = False
+    _sorted: bool = True
     _rng: random.Random
+    _data_header_full: bool = True
+    _samples: Tuple[str, ...]
 
     def __init__(self):
         self._rng = random.Random(42)
+        self._samples = ("sample1",)
         pass
 
     def sano(self, sano: bool) -> "IlluminaBuilder":
         self._sano = sano
+        return self
+
+    def sorted(self, sorted: bool) -> "IlluminaBuilder":
+        self._sorted = sorted
+        return self
+
+    def data_header(self, data_header_full: bool) -> "IlluminaBuilder":
+        self._data_header_full = data_header_full
+        return self
+
+    def samples(self, samples: Iterable[str]) -> "IlluminaBuilder":
+        self._samples = tuple(samples)
         return self
 
     def _generate_probes(self) -> Generator[Probe, None, None]:
@@ -57,6 +73,17 @@ class IlluminaBuilder:
 
         return sorted(self._generate_probes(), key=probekey)
 
+    def _generate_unsorted_probes(self) -> List[Probe]:
+        # convert positions to string before sorting so that they will be out of
+        # order (this assumes that there are positions with different numbers of digits)
+        def str_probekey(probe: Probe) -> Tuple[str, int, str]:
+            if probe.chrom.isnumeric():
+                return ("", int(probe.chrom), str(probe.pos))
+            else:
+                return (probe.chrom, 0, str(probe.pos))
+
+        return sorted(self._generate_probes(), key=str_probekey)
+
     def _generate_header_lines(self, num_snps=730059, num_samples=24):
         yield "[Header]"
         yield "GSGT Version	2.0.4"
@@ -71,50 +98,70 @@ class IlluminaBuilder:
             yield "SANO"
 
     @staticmethod
-    def _map_to_line(header, data):
+    def _map_to_line(header: Iterable[str], data: Dict[str, Any]) -> str:
         line_items = []
         for heading in header:
             line_items.append(str(data.get(heading, ".")))
         return "\t".join(line_items)
 
-    def _generate_data_lines(self, samples, probes):
+    def _generate_data_header(self) -> Tuple[str, ...]:
+        if self._data_header_full:
+            return tuple(
+                (
+                    "Sample ID",
+                    "RsID",
+                    "GC Score",
+                    "SNP Name",
+                    "SNP Index",
+                    "Sample Index",
+                    "Sample Name",
+                    "Sample Group",
+                    "SNP Aux",
+                    "Chr",
+                    "Position",
+                    "GT Score",
+                    "Cluster Sep",
+                    "SNP",
+                    "ILMN Strand",
+                    "Customer Strand",
+                    "Top Genomic Sequence",
+                    "Plus/Minus Strand",
+                    "Allele1 - Plus",
+                    "Allele2 - Plus",
+                    "Allele1 - Forward",
+                    "Allele2 - Forward",
+                    "Theta",
+                    "R",
+                    "X",
+                    "Y",
+                    "X Raw",
+                    "Y Raw",
+                    "B Allele Freq",
+                    "Log R Ratio",
+                    "CNV Value",
+                    "CNV Confidence",
+                )
+            )
+        else:
+            return tuple(
+                (
+                    "Sample ID",
+                    "SNP Name",
+                    "Sample Name",
+                    "Chr",
+                    "Position",
+                    "SNP",
+                    "Plus/Minus Strand",
+                    "Allele1 - Plus",
+                    "Allele2 - Plus",
+                )
+            )
+
+    def _generate_data_lines(self, probes) -> Generator[str, None, None]:
+        header = self._generate_data_header()
         yield "[Data]"
-        header = [
-            "Sample ID",
-            "RsID",
-            "GC Score",
-            "SNP Name",
-            "SNP Index",
-            "Sample Index",
-            "Sample Name",
-            "Sample Group",
-            "SNP Aux",
-            "Chr",
-            "Position",
-            "GT Score",
-            "Cluster Sep",
-            "SNP",
-            "ILMN Strand",
-            "Customer Strand",
-            "Top Genomic Sequence",
-            "Plus/Minus Strand",
-            "Allele1 - Plus",
-            "Allele2 - Plus",
-            "Allele1 - Forward",
-            "Allele2 - Forward",
-            "Theta",
-            "R",
-            "X",
-            "Y",
-            "X Raw",
-            "Y Raw",
-            "B Allele Freq",
-            "Log R Ratio",
-            "CNV Value",
-            "CNV Confidence",
-        ]
         yield "\t".join(header)
-        for i, sample in enumerate(samples, 1):
+        for i, sample in enumerate(self._samples, 1):
             # TODO mark some as chr/pos 0/0
             for probe in probes:
                 data = {}
@@ -132,16 +179,19 @@ class IlluminaBuilder:
                 data["Allele2 - Plus"] = self._rng.choice(alleles)
                 yield self._map_to_line(header, data)
 
-    def _generate_lines(self, samples=["sample1"]):
+    def _generate_lines(self) -> Generator[str, None, None]:
         # first generate the probes
         # make sure they are sorted by chromosome and position
-        probes = self._generate_sorted_probes()
+        if self._sorted:
+            probes = self._generate_sorted_probes()
+        else:
+            probes = self._generate_unsorted_probes()
         # now we know how many probes and how many samples we have can generate header
-        for line in self._generate_header_lines(num_snps=len(probes), num_samples=len(samples)):
+        for line in self._generate_header_lines(num_snps=len(probes), num_samples=len(self._samples)):
             yield line
 
         # now we can generate data lines for each sample
-        for line in self._generate_data_lines(samples, probes):
+        for line in self._generate_data_lines(probes):
             yield line
 
     def build_file(self) -> StringIO:

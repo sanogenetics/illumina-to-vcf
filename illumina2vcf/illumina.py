@@ -1,5 +1,6 @@
 import csv
 import logging
+from dataclasses import dataclass
 from typing import Dict, FrozenSet, Generator, Iterable, List, Tuple
 
 # header constants
@@ -14,6 +15,19 @@ STRAND = "Plus/Minus Strand"
 
 
 logger = logging.getLogger(__name__)
+
+
+# with python 3.10 or higher, add slots=True here to save memory
+@dataclass(frozen=True)
+class IlluminaRow:
+    sample_id: str
+    snp_name: str
+    chrom: str
+    pos: int
+    snp: str
+    allele1: str
+    allele2: str
+    strand: str
 
 
 class PositionError(Exception):
@@ -110,8 +124,9 @@ class IlluminaReader:
         date = "".join(date_components)
         return (date, source)
 
-    def generate_line_blocks(self, input: Iterable[str]) -> Generator[List[Dict[str, str]], None, None]:
-        block: List[dict] = []
+    def _sorted_lines(self, input: Iterable[str]) -> Tuple[IlluminaRow, ...]:
+        # this might get a bit big
+        row_minis: List[IlluminaRow] = []
         for i, row in enumerate(csv.DictReader(input, delimiter=self.delimiter)):
             if CHR not in row:
                 raise DataError(f"{CHR} missing in row {i}")
@@ -122,25 +137,45 @@ class IlluminaReader:
             if SNP not in row:
                 raise DataError(f"{SNP} missing in row {i}")
 
+            row_mini = IlluminaRow(
+                row[SAMPLE_ID],
+                row[SNP_NAME],
+                row[CHR],
+                int(row[POSITION]),
+                row[SNP],
+                row[ALLELE1],
+                row[ALLELE2],
+                row[STRAND],
+            )
+
+            row_minis.append(row_mini)
+
+        # this might take some time
+        rows_mini_sorted = tuple(sorted(row_minis, key=lambda r: (r.chrom, r.pos, r.sample_id)))
+        return rows_mini_sorted
+
+    def generate_line_blocks(self, input: Iterable[str]) -> Generator[List[IlluminaRow], None, None]:
+        block: List[IlluminaRow] = []
+        for row in self._sorted_lines(input):
             # is there an existing block that has ended?
-            if block and (block[0][CHR] != row[CHR] or block[0][POSITION] != row[POSITION]):
+            if block and (block[0].chrom != row.chrom or block[0].pos != row.pos):
                 # check we haven't gone backwards
-                if block[0][CHR] == row[CHR] and int(block[0][POSITION]) > int(row[POSITION]):
-                    raise PositionError(f"Position decrease on {row[CHR]} from {block[0][POSITION]} to {row[POSITION]}")
+                if block[0].chrom == row.chrom and int(block[0].pos) > int(row.pos):
+                    raise PositionError(f"Position decrease on {row.chrom} from {block[0].pos} to {row.pos}")
                 # complete the previous block
                 yield block
                 block = []
             # ignore probes without chr or pos
-            if row[CHR] == 0 or row[POSITION] == 0:
-                logger.debug(f"Ignoring blocked {row[SNP_NAME]}")
+            if row.chrom == 0 or row.pos == 0:
+                logger.debug(f"Ignoring blocked {row.snp_name}")
                 continue
             # ignore blocked probes
-            if row[SNP_NAME] in self.blocklist:
-                logger.debug(f"Ignoring blocked {row[SNP_NAME]}")
+            if row.snp_name in self.blocklist:
+                logger.debug(f"Ignoring blocked {row.snp_name}")
                 continue
             # ignore rows that are illumina duplicates
-            if "ilmndup" in row[SNP_NAME]:
-                logger.debug(f"Ignoring ilmndup {row[SNP_NAME]}")
+            if "ilmndup" in row.snp_name:
+                logger.debug(f"Ignoring ilmndup {row.snp_name}")
                 continue
 
             block.append(row)

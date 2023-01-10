@@ -7,7 +7,7 @@ from puretabix.vcf import VCFLine
 from .bpm.BPMRecord import BPMRecord
 from .bpm.IlluminaBeadArrayFiles import RefStrand
 from .bpm.ReferenceGenome import ReferenceGenome
-from .illumina import ALLELE1, ALLELE2, SAMPLE_ID, SNP, SNP_NAME, STRAND
+from .illumina import IlluminaRow
 
 STRANDSWAP = {"A": "T", "T": "A", "C": "G", "G": "C", "I": "I", "D": "D"}
 
@@ -58,15 +58,15 @@ class VCFMaker:
                     {"ID": chrom, "length": rec.rlen, "assembly": buildname},
                 )
 
-    def generate_lines(self, blocks: Iterable[List[Dict[str, str]]]) -> Generator[VCFLine, None, None]:
+    def generate_lines(self, blocks: Iterable[List[IlluminaRow]]) -> Generator[VCFLine, None, None]:
         column_header = False
         samples: List[str] = []
         for block in blocks:
             # if we've not got a list of samples yet, get them from this block unfiltered
             if not samples:
                 for row in block:
-                    if row[SAMPLE_ID] not in samples:
-                        samples.append(row[SAMPLE_ID])
+                    if row.sample_id not in samples:
+                        samples.append(row.sample_id)
             # if we've not output column names, do so
             if not column_header:
                 yield self._get_column_header(samples)
@@ -96,32 +96,32 @@ class VCFMaker:
             )
         )
 
-    def _line_block_to_vcf_line(self, block: List[Dict[str, str]], sample_set) -> VCFLine:
+    def _line_block_to_vcf_line(self, block: List[IlluminaRow], sample_set) -> VCFLine:
         # if block is silly big skip it (first block will be included regardless of size)
         if sample_set and len(block) > 10 * len(sample_set):
-            raise ConverterError(f"Oversized block {block[0]['Chr']}:{block[0]['Position']}: {len(block)} rows")
+            raise ConverterError(f"Oversized block {block[0].chrom}:{block[0].pos}: {len(block)} rows")
 
         # if we've not got a list of samples yet, get them from this block unfiltered
         if not sample_set:
             for row in block:
-                if row[SAMPLE_ID] not in sample_set:
-                    sample_set.append(row[SAMPLE_ID])
+                if row.sample_id not in sample_set:
+                    sample_set.append(row.sample_id)
 
         # if there are multiple probes that agree, thats fine
         # need to remove conflicting and duplicate rows
         [calls, probed] = self._simplify_block(block)
         # if not calls:
         #    raise ConverterError(
-        #        f"Oversimplified block {block[0]['Chr']}:{block[0]['Position']}"
+        #        f"Oversimplified block {block[0].chrom}:{block[0].pos}"
         #    )
         # can assume each row in block has:
         #  same chm, pos
         #  unique sample names
         #  had consistent calls
 
-        snp_names = tuple(sorted(frozenset([r[SNP_NAME] for r in block])))
+        snp_names = tuple(sorted(frozenset([r.snp_name for r in block])))
 
-        chm = block[0]["Chr"]
+        chm = block[0].chrom
         # convert pseudoautosomal (XY) to X
         if chm == "XY" or chm == "chrXY":
             chm = "chrX"
@@ -132,10 +132,10 @@ class VCFMaker:
         if not chm.startswith("chr"):
             chm = f"chr{chm}"
         if chm not in self._genome_reader.reference_fasta.faidx.index:
-            raise ConverterError(f"Unexpected chromosome {chm}:{block[0]['Position']}")
+            raise ConverterError(f"Unexpected chromosome {chm}:{block[0].pos}")
         if not self.is_valid_chromosome(chm):
-            raise ConverterError(f"Invalid chromosome {chm}:{block[0]['Position']}")
-        pos = int(block[0]["Position"])
+            raise ConverterError(f"Invalid chromosome {chm}:{block[0].pos}")
+        pos = int(block[0].pos)
 
         ref = self._genome_reader.get_reference_bases(chm, pos - 1, pos)
         if not ref:
@@ -146,7 +146,7 @@ class VCFMaker:
         if "I" in probed or "D" in probed:
             if probed.intersection({"A", "C", "G", "T"}):
                 raise ConverterError(
-                    f"{';'.join(snp_names)}: contains indels and SNPs ({','.join(probed)}) {block[0]['Chr']}:{block[0]['Position']}"
+                    f"{';'.join(snp_names)}: contains indels and SNPs ({','.join(probed)}) {block[0].chrom}:{block[0].pos}"
                 )
 
             if (chm, pos) in self._indel_records:
@@ -159,7 +159,7 @@ class VCFMaker:
                 for alt_record in locus_records[1:]:
                     if (ref, alt) != self.get_alleles_for_indel(alt_record):
                         raise ConverterError(
-                            f"{';'.join(snp_names)}: Mismatched alleles ({','.join(probed)}) {block[0]['Chr']}:{block[0]['Position']}"
+                            f"{';'.join(snp_names)}: Mismatched alleles ({','.join(probed)}) {block[0].chrom}:{block[0].pos}"
                         )
                 # Illumina position is the position of the insertion (ie; one base after the ref allele)
                 # We want the position of the start of the ref allele, so we need to reduce pos by 1
@@ -181,7 +181,7 @@ class VCFMaker:
             # handle ref/alt split
             if ref not in probed:
                 raise ConverterError(
-                    f"{';'.join(snp_names)}: Reference ({ref}) not probed ({','.join(probed)}) {block[0]['Chr']}:{block[0]['Position']}"
+                    f"{';'.join(snp_names)}: Reference ({ref}) not probed ({','.join(probed)}) {block[0].chrom}:{block[0].pos}"
                 )
             probed.remove(ref)
 
@@ -197,9 +197,7 @@ class VCFMaker:
                 elif allele1 == ref:
                     allele1n = "0"
                 elif allele1 not in alt:
-                    raise ConverterError(
-                        f"Unexpected forward {block[0]['Chr']}:{block[0]['Position']} {allele1} vs {ref}/{alt}"
-                    )
+                    raise ConverterError(f"Unexpected forward {block[0].chrom}:{block[0].pos} {allele1} vs {ref}/{alt}")
                 else:
                     allele1n = str(1 + alt.index(allele1))
 
@@ -209,9 +207,7 @@ class VCFMaker:
                 elif allele2 == ref:
                     allele2n = "0"
                 elif allele2 not in alt:
-                    raise ConverterError(
-                        f"Unexpected forward {block[0]['Chr']}:{block[0]['Position']} {allele2} vs {ref}/{alt}"
-                    )
+                    raise ConverterError(f"Unexpected forward {block[0].chrom}:{block[0].pos} {allele2} vs {ref}/{alt}")
                 else:
                     allele2n = str(1 + alt.index(allele2))
 
@@ -293,29 +289,29 @@ class VCFMaker:
 
         return vcf_genotype
 
-    def _simplify_block(self, block: List[Dict[str, str]]) -> Tuple[Dict[str, Tuple[str, str]], set]:
+    def _simplify_block(self, block: List[IlluminaRow]) -> Tuple[Dict[str, Tuple[str, str]], set]:
         combined_probes = {}
         calls = {}
         conflicts = []
         for row in block:
-            sampleid = row[SAMPLE_ID]
-            strand = row[STRAND]
+            sampleid = row.sample_id
+            strand = row.strand
 
-            probes = row[SNP]
+            probes = row.snp
             match = re.match(r"\[([ATCGID]+)\/([ATCGID]+)\]", probes)
             if not match:
-                raise ConverterError(f"Unexpcted probes {row['Chr']}:{row['Position']} {probes}")
+                raise ConverterError(f"Unexpcted probes {row.chrom}:{row.pos} {probes}")
 
             new_probes = match.group(1, 2)
             # exclude indel probes
             # if new_probes[0] not in "ATCG" or new_probes[1] not in "ATCG":
-            #    raise ConverterError(f"Not a SNV probe {row['Chr']}:{row['Position']} {probes}")
+            #    raise ConverterError(f"Not a SNV probe {row.chrom}:{row.pos} {probes}")
 
             # swap strand if needed
             if strand == "-":
                 new_probes = tuple((STRANDSWAP[probe] for probe in new_probes))
 
-            new_calls = (row[ALLELE1], row[ALLELE2])
+            new_calls = (row.allele1, row.allele2)
 
             if sampleid not in calls:
                 # This sample hasnt been called before
