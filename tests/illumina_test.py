@@ -48,6 +48,15 @@ Total Samples	24"""
             (True, False),
             (("sample1",), ("sample1", "sample2")),
         ),
+        ids=[
+            "-".join(i)
+            for i in itertools.product(
+                ["GSA", "Sano"],
+                ["sorted", "unsorted"],
+                ["fullheader", "miniheader"],
+                ["1sample", "2sample"],
+            )
+        ],
     )
     def test_generate_blocks(self, sano: bool, sorted: bool, data_header: bool, samples: Tuple[str, ...]) -> None:
         """
@@ -70,3 +79,8 @@ Total Samples	24"""
             assert len(block) > 0
             # each block should be fully divisible by the number of samples
             assert len(block) % len(samples) == 0
+            # all lines in a block should have the same chromosome and position
+            assert len(set((i.chrom for i in block))) == 1
+            assert len(set((i.pos for i in block))) == 1
+            # each line should have a unique sample and snp ids
+            assert len(set(((i.sample_id, i.snp_name) for i in block))) == len(block)
