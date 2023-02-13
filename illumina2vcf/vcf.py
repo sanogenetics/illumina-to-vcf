@@ -167,8 +167,6 @@ class VCFMaker:
                 # alt column in VCF is a list
                 alt = (alt,)
 
-                pos -= 1
-
             else:
                 raise ConverterError(f"{';'.join(snp_names)}: No BPM record for indel ({','.join(probed)}) {chm}:{pos}")
 
@@ -244,12 +242,12 @@ class VCFMaker:
             reference_base = self._genome_reader.get_reference_bases(chrom, start_index - 1, start_index)
             reference_allele = reference_base + indel_sequence
             alternate_allele = reference_base
-            pos = bpm_record.pos
+            pos = bpm_record.pos - 1
         else:
             reference_base = self._genome_reader.get_reference_bases(chrom, start_index, start_index + 1)
             reference_allele = reference_base
             alternate_allele = reference_base + indel_sequence
-            pos = bpm_record.pos + 1
+            pos = bpm_record.pos
         return (reference_allele, alternate_allele, pos)
 
     def format_vcf_genotype(self, vcf_allele1_char, vcf_allele2_char):
