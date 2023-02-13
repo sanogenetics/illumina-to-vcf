@@ -153,11 +153,11 @@ class VCFMaker:
                 # get the records in the manifest for this locaion
                 locus_records = self._indel_records[(chm, pos)]
 
-                (ref, alt) = self.get_alleles_for_indel(locus_records[0])
+                (ref, alt, pos) = self.get_alleles_for_indel(locus_records[0])
 
                 # check the other lotus records have the same reference + alternative alleles
                 for alt_record in locus_records[1:]:
-                    if (ref, alt) != self.get_alleles_for_indel(alt_record):
+                    if (ref, alt, pos) != self.get_alleles_for_indel(alt_record):
                         raise ConverterError(
                             f"{';'.join(snp_names)}: Mismatched alleles ({','.join(probed)}) {block[0].chrom}:{block[0].pos}"
                         )
@@ -240,14 +240,17 @@ class VCFMaker:
             chrom = "X"
 
         if bpm_record.is_deletion:
+
             reference_base = self._genome_reader.get_reference_bases(chrom, start_index - 1, start_index)
             reference_allele = reference_base + indel_sequence
             alternate_allele = reference_base
+            pos = bpm_record.pos
         else:
             reference_base = self._genome_reader.get_reference_bases(chrom, start_index, start_index + 1)
             reference_allele = reference_base
             alternate_allele = reference_base + indel_sequence
-        return (reference_allele, alternate_allele)
+            pos = bpm_record.pos + 1
+        return (reference_allele, alternate_allele, pos)
 
     def format_vcf_genotype(self, vcf_allele1_char, vcf_allele2_char):
         """
