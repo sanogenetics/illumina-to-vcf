@@ -17,28 +17,28 @@ this is necessary because the vcf has multiple samples on each row
 get the header that won't be sorted:
 
 ```sh
-unzip -p FinalReport.zip | head | gzip > input.csv.gz
+unzip -p FinalReport.zip | head | gzip > input.tsv.gz
 ```
 
 get and sort the rest, removing reference sample on the way.
 - this should be sorted correctly, except that chrMT will come before chrX, chrY and chrXY
 
 ```sh
-unzip -p FinalReport.zip | tail -n+11 | grep -v NA12878 | sort -Vt , -k 9 -k 10 -k 4 -k 5 | gzip >> input.csv.gz
+unzip -p FinalReport.zip | tail -n+11 | grep -v NA12878 | sort -Vt , -k 9 -k 10 -k 4 -k 5 | gzip >> input.tsv.gz
 ```
 
 Running the script is done like:
 
 ```sh
 
-gunzip -c input.txt.gz | python3 -m illumina2vcf --manifest GSA-24v3-0_A2.csv --tab Homo_sapiens_assembly38.fasta | bgzip > output.vcf.gz
+gunzip -c input.tsv.gz | python3 -m illumina2vcf --manifest GSA-24v3-0_A2.csv --tab Homo_sapiens_assembly38.fasta | bgzip > output.vcf.gz
 
 ```
 
 Polishing includes resorting (chrX SNPs out of order because chrXY get converted to chrX) and tabix indexing
 
 ```sh
-bcftools sort out.vcf.gz | bcftools view -s ^NA12878 --no-version --no-update -Oz > out.clean.vcf.gz
+bcftools sort output.vcf.gz | bcftools view -s ^NA12878 --no-version --no-update -Oz > out.clean.vcf.gz
 tabix out.clean.vcf.gz
 ```
 

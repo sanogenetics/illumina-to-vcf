@@ -1,3 +1,5 @@
+test_data/
+ref/
 in/
 venv/
 *.vcf.gz

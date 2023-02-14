@@ -103,6 +103,11 @@ class TestVCF:
             "rs797044837": None,  # deletion
             "rs61750435": None,  # insertion
         }
+        variant_info = {
+            "rs9651229": "chr1-632287-C-T",
+            "rs797044837": "chr1-1338000-CT-C",
+            "rs61750435": "chr1-2406791-C-CT",
+        }
         maxref = 0
         maxalt = 0
         for line in lines:
@@ -117,6 +122,7 @@ class TestVCF:
 
             if line._id[0] in rsidlines.keys():
                 rsid = line._id[0]
+                assert variant_info[rsid] == "-".join([line.chrom, str(line.pos), line.ref, line.alt[0]])
                 assert not rsidlines[rsid]
                 rsidlines[rsid] = line
         assert maxref > 1
