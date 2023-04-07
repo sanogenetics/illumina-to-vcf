@@ -58,9 +58,7 @@ class Converter:
         blocks = reader.generate_line_blocks(source)
 
         # generate vcf lines and qc info
-        vcf_lines = []
-        for line in vcfgenerator.generate_lines(blocks):
-            vcf_lines.append(line)
+        vcf_lines = [line for line in vcfgenerator.generate_lines(blocks)]
 
         # write header
         for line in vcfgenerator.generate_header(date, header_source, self.buildname):
