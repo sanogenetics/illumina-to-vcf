@@ -54,15 +54,20 @@ class Converter:
         # read source header
         date, header_source = reader.parse_header(source)
 
+        # read source blocks
+        blocks = reader.generate_line_blocks(source)
+
+        # generate vcf lines and qc info
+        vcf_lines = []
+        for line in vcfgenerator.generate_lines(blocks):
+            vcf_lines.append(line)
+
         # write header
         for line in vcfgenerator.generate_header(date, header_source, self.buildname):
             destination.write(str(line))
             destination.write("\n")
 
-        # read source blocks
-        blocks = reader.generate_line_blocks(source)
-
         # write vcf lines
-        for line in vcfgenerator.generate_lines(blocks):
+        for line in vcf_lines:
             destination.write(str(line))
             destination.write("\n")
