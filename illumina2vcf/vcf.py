@@ -88,10 +88,12 @@ class VCFMaker:
                     {"ID": chrom, "length": rec.rlen, "assembly": buildname},
                 )
         # ##qc_stats=<callrate=0.99,het=0.33,x_het=0.21,y_notnull=0.24>
-        yield VCFLine.as_comment_key_dict(
-            "qc_stats",
-            {stat: value for (stat, value) in self._calculate_qc_stats()},
-        )
+        qc_stats = {stat: value for (stat, value) in self._calculate_qc_stats()}
+        if qc_stats:
+            yield VCFLine.as_comment_key_dict(
+                "qc_stats",
+                qc_stats,
+            )
 
     def generate_lines(self, blocks: Iterable[List[IlluminaRow]]) -> Generator[VCFLine, None, None]:
         column_header = False
