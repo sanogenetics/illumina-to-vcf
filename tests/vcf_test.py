@@ -27,7 +27,7 @@ def genome_reader() -> ReferenceGenome:
 
 
 class TestVCF:
-    def test_header_no_data(self, blocks, genome_reader):
+    def test_header_only(self, genome_reader):
 
         """
         GIVEN a VCF generator
@@ -71,7 +71,6 @@ class TestVCF:
         """
         header_data = {}
         for line in lines:
-            print(line)
             assert line
             assert line[:2] == "##"
             field, data = line[2:].split("=", maxsplit=1)
