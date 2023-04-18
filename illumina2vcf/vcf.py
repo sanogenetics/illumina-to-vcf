@@ -1,6 +1,6 @@
 import logging
 import re
-from typing import Dict, Generator, Iterable, List, Tuple
+from typing import Dict, Generator, Iterable, List, Literal, Tuple
 
 from puretabix.vcf import VCFLine
 
@@ -18,6 +18,77 @@ class ConverterError(Exception):
     pass
 
 
+class QC_stats:
+    def __init__(self):
+        self.vcf_lines_autosomal = 0
+        self.called_lines_autosomal = 0
+        self.heterozygous_lines_autosomal = 0
+        self.called_lines_x = 0
+        self.heterozygous_lines_x = 0
+        self.vcf_lines_y = 0
+        self.called_lines_y = 0
+
+    def vcf_comment(self) -> str:
+        qc_stats = {}
+        try:
+            qc_stats["callrate"] = self.call_rate("autosomal")
+        except ZeroDivisionError:
+            pass
+        try:
+            qc_stats["y_notnull"] = self.call_rate("Y")
+        except ZeroDivisionError:
+            pass
+        try:
+            qc_stats["het"] = self.heterozygosity("autosomal")
+        except ZeroDivisionError:
+            pass
+        try:
+            qc_stats["x_het"] = self.heterozygosity("X")
+        except ZeroDivisionError:
+            pass
+        if qc_stats:
+            return VCFLine.as_comment_key_dict("qc_stats", qc_stats)
+        else:
+            pass
+
+    def call_rate(self, chrom: Literal["autosomal", "Y"]) -> float:
+        if chrom == "autosomal":
+            return "{0:.2f}".format(self.called_lines_autosomal / self.vcf_lines_autosomal)
+        elif chrom == "Y":
+            return "{0:.2f}".format(self.called_lines_y / self.vcf_lines_y)
+        else:
+            raise NotImplementedError(f"cannot calculate call rate for chrom {chrom}")
+
+    def heterozygosity(self, chrom: Literal["autosomal", "X"]) -> float:
+        if chrom == "autosomal":
+            return "{0:.2f}".format(self.heterozygous_lines_autosomal / self.called_lines_autosomal)
+        elif chrom == "X":
+            return "{0:.2f}".format(self.heterozygous_lines_x / self.called_lines_x)
+        else:
+            raise NotImplementedError(f"cannot calculate heterozygosity for chrom {chrom}")
+
+    def _update_qc_stats(self, vcfline: VCFLine) -> None:
+        gt = vcfline.sample[0]["GT"]
+        chm = vcfline.chrom
+        if chm == "chrX":
+            if gt != "./.":
+                self.called_lines_x += 1
+                if len(set(gt.split("/"))) == 2:
+                    self.heterozygous_lines_x += 1
+        elif chm == "chrY":
+            self.vcf_lines_y += 1
+            if gt != "./.":
+                self.called_lines_y += 1
+        elif chm == "chrM":
+            pass
+        else:
+            self.vcf_lines_autosomal += 1
+            if gt != "./.":
+                self.called_lines_autosomal += 1
+                if len(set(gt.split("/"))) == 2:
+                    self.heterozygous_lines_autosomal += 1
+
+
 class VCFMaker:
     _genome_reader: ReferenceGenome
     _indel_records: Dict
@@ -25,40 +96,11 @@ class VCFMaker:
     def __init__(self, genome_reader: ReferenceGenome, indel_records: Dict = {}):
         self._genome_reader = genome_reader
         self._indel_records = indel_records
-        self.qc_stats = {
-            "vcf_lines_autosomal": 0,
-            "called_lines_autosomal": 0,
-            "heterozygous_lines_autosomal": 0,
-            "called_lines_x": 0,
-            "heterozygous_lines_x": 0,
-            "vcf_lines_y": 0,
-            "called_lines_y": 0,
-        }
+        self.qc_stats = QC_stats()
 
     @staticmethod
     def is_valid_chromosome(chrom: str) -> bool:
         return bool(re.match(r"^chr[1-9XYM][0-9]?$", chrom))
-
-    def _calculate_qc_stats(self):
-        if self.qc_stats["vcf_lines_autosomal"] > 0:
-            yield (
-                "callrate",
-                "{0:.2f}".format(self.qc_stats["called_lines_autosomal"] / self.qc_stats["vcf_lines_autosomal"]),
-            )
-
-        if self.qc_stats["called_lines_autosomal"] > 0:
-            yield (
-                "het",
-                "{0:.2f}".format(
-                    self.qc_stats["heterozygous_lines_autosomal"] / self.qc_stats["called_lines_autosomal"]
-                ),
-            )
-
-        if self.qc_stats["called_lines_x"] > 0:
-            yield ("x_het", "{0:.2f}".format(self.qc_stats["heterozygous_lines_x"] / self.qc_stats["called_lines_x"]))
-
-        if self.qc_stats["vcf_lines_y"] > 0:
-            yield ("y_notnull", "{0:.2f}".format(self.qc_stats["called_lines_y"] / self.qc_stats["vcf_lines_y"]))
 
     def generate_header(self, date: str, source: str, buildname: str) -> Generator[VCFLine, None, None]:
         # write header
@@ -88,12 +130,9 @@ class VCFMaker:
                     {"ID": chrom, "length": rec.rlen, "assembly": buildname},
                 )
         # ##qc_stats=<callrate=0.99,het=0.33,x_het=0.21,y_notnull=0.24>
-        qc_stats = {stat: value for (stat, value) in self._calculate_qc_stats()}
+        qc_stats = self.qc_stats.vcf_comment()
         if qc_stats:
-            yield VCFLine.as_comment_key_dict(
-                "qc_stats",
-                qc_stats,
-            )
+            yield qc_stats
 
     def generate_lines(self, blocks: Iterable[List[IlluminaRow]]) -> Generator[VCFLine, None, None]:
         column_header = False
@@ -255,28 +294,11 @@ class VCFMaker:
         for sampleid in sample_set:
             samples.append({"GT": converted_calls.get(sampleid, "./.")})
 
+        vcfline = VCFLine("", "", "", {}, chm, pos, snp_names, ref, alt, ".", ["PASS"], {}, samples)
+
         # update qc totals if single sample
         if len(samples) == 1:
-            gt = samples[0]["GT"]
-            if chm == "chrX":
-                if gt != "./.":
-                    self.qc_stats["called_lines_x"] += 1
-                    if len(set(gt.split("/"))) == 2:
-                        self.qc_stats["heterozygous_lines_x"] += 1
-            elif chm == "chrY":
-                self.qc_stats["vcf_lines_y"] += 1
-                if gt != "./.":
-                    self.qc_stats["called_lines_y"] += 1
-            elif chm == "chrM":
-                pass
-            else:
-                self.qc_stats["vcf_lines_autosomal"] += 1
-                if gt != "./.":
-                    self.qc_stats["called_lines_autosomal"] += 1
-                    if len(set(gt.split("/"))) == 2:
-                        self.qc_stats["heterozygous_lines_autosomal"] += 1
-
-        vcfline = VCFLine("", "", "", {}, chm, pos, snp_names, ref, alt, ".", ["PASS"], {}, samples)
+            self.qc_stats._update_qc_stats(vcfline)
 
         return vcfline
 
