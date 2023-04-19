@@ -31,19 +31,19 @@ class QC_stats:
     def vcf_comment(self) -> str:
         qc_stats = {}
         try:
-            qc_stats["callrate"] = self.call_rate("autosomal")
+            qc_stats["callrate"] = f"{self.call_rate('autosomal'):.2f}"
         except ZeroDivisionError:
             pass
         try:
-            qc_stats["y_notnull"] = self.call_rate("Y")
+            qc_stats["y_notnull"] = f"{self.call_rate('Y'):.2f}"
         except ZeroDivisionError:
             pass
         try:
-            qc_stats["het"] = self.heterozygosity("autosomal")
+            qc_stats["het"] = f"{self.heterozygosity('autosomal'):.2f}"
         except ZeroDivisionError:
             pass
         try:
-            qc_stats["x_het"] = self.heterozygosity("X")
+            qc_stats["x_het"] = f"{self.heterozygosity('X'):.2f}"
         except ZeroDivisionError:
             pass
         if qc_stats:
@@ -53,17 +53,17 @@ class QC_stats:
 
     def call_rate(self, chrom: Literal["autosomal", "Y"]) -> float:
         if chrom == "autosomal":
-            return "{0:.2f}".format(self.called_lines_autosomal / self.vcf_lines_autosomal)
+            return self.called_lines_autosomal / self.vcf_lines_autosomal
         elif chrom == "Y":
-            return "{0:.2f}".format(self.called_lines_y / self.vcf_lines_y)
+            return self.called_lines_y / self.vcf_lines_y
         else:
             raise NotImplementedError(f"cannot calculate call rate for chrom {chrom}")
 
     def heterozygosity(self, chrom: Literal["autosomal", "X"]) -> float:
         if chrom == "autosomal":
-            return "{0:.2f}".format(self.heterozygous_lines_autosomal / self.called_lines_autosomal)
+            return self.heterozygous_lines_autosomal / self.called_lines_autosomal
         elif chrom == "X":
-            return "{0:.2f}".format(self.heterozygous_lines_x / self.called_lines_x)
+            return self.heterozygous_lines_x / self.called_lines_x
         else:
             raise NotImplementedError(f"cannot calculate heterozygosity for chrom {chrom}")
 
