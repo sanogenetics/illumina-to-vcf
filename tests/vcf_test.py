@@ -27,11 +27,13 @@ def genome_reader() -> ReferenceGenome:
 
 
 class TestVCF:
-    def test_header(self, genome_reader):
+    def test_header_only(self, genome_reader):
+
         """
         GIVEN a VCF generator
         """
         vcfgenerator = VCFMaker(genome_reader, {})
+
         """
         WHEN generating a header
         """
@@ -42,6 +44,64 @@ class TestVCF:
         for line in lines:
             assert line
             assert line[0] == "#"
+
+    def test_header(self, blocks, genome_reader):
+        """
+        GIVEN an interable of blocks
+        """
+        vcfgenerator = VCFMaker(genome_reader, {})
+
+        """
+        GIVEN a VCF generator
+        """
+        # generate vcf lines and qc info
+        vcf_lines = [line for line in vcfgenerator.generate_lines(blocks)]
+
+        """
+        WHEN generating a header
+        """
+        lines = tuple(
+            (
+                str(i)
+                for i in vcfgenerator.generate_header("2022-03-25 9:20 AM", "GSAMD-24v3-0-EA_20034606_A2", "GRCh38")
+            )
+        )
+        """
+        THEN it should produce valid header output
+        """
+        header_data = {}
+        for line in lines:
+            assert line
+            assert line[:2] == "##"
+            field, data = line[2:].split("=", maxsplit=1)
+            if field in ("contig", "qc_stats"):
+                data_dict = {}
+                for stat in data[1:-1].split(","):
+                    name, value = stat.split("=")
+                    data_dict[name] = value
+                if field == "contig":
+                    try:
+                        header_data[field].append(data_dict)
+                    except KeyError:
+                        header_data[field] = [
+                            data_dict,
+                        ]
+                else:
+                    header_data[field] = data_dict
+            else:
+                header_data[field] = data
+        assert header_data["fileformat"] == "VCFv4.3"
+        assert "filedate" in header_data  # this is not getting properly formatted
+        assert header_data["source"] == '"GSAMD-24v3-0-EA_20034606_A2, Sano Genetics"'
+        assert header_data["FILTER"] == '<ID=PASS,Description="All filters passed">'
+        assert header_data["FORMAT"] == "<ID=GT,Number=1,Type=String,Description=Genotype>"
+        assert len(header_data["contig"]) == 5
+        for chrom_info in header_data["contig"]:
+            assert int(chrom_info["length"]) == 3000000
+            assert chrom_info["assembly"] == "GRCh38"
+            assert chrom_info["ID"] in ("chr1", "chr2", "chr10", "chrX", "chrY")
+        for stat in header_data["qc_stats"]:
+            assert float(header_data["qc_stats"][stat]) <= 1
 
     def test_data(self, blocks, genome_reader):
         """
