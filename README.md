@@ -1,5 +1,5 @@
 Illumina2VCF
-===========
+============
 
 This is tool for converting Illumina FinalReport microarray results into VCF files. This reconciles multiple probes for the same location, as well as including the reference allele appropriately.
 
@@ -97,12 +97,9 @@ python3 -m venv venv
 # Activate virtual environment
 source venv/bin/activate
 
-# first install pip tools
-pip install pip-tools
-# Install exact requirements
-pip-sync requirements.txt requirements-dev.txt
-# Install editable with development extras
-pip install -e '.[dev]'
+# install hatch
+# https://hatch.pypa.io/latest/
+pip install hatch pre-commit
 
 # before making any commits
 # Enable pre-commit hooks
@@ -114,31 +111,17 @@ pre-commit run --all-files
 # - black to format code
 
 # before making any code changes
-# Run tests
-pytest
+# Run test
+hatch run test
 # Run tests, print coverage
-coverage run -m pytest && coverage report -m
-# Type checking
-mypy illumina2vcf
-
-# after making any dependency changes
-# Freeze dependencies
-pip-compile
-# Freeze dev dependencies
-pip-compile requirements-dev.in
-# then run pip-sync again to install them!
-# Print dependencies
-pipdeptree
+hatch run test-cov
+hatch run cov-report
 
 ```
 
 Global git ignores per https://help.github.com/en/github/using-git/ignoring-files#configuring-ignored-files-for-all-repositories-on-your-computer
 
 For release to PyPI see https://packaging.python.org/tutorials/packaging-projects/
-
-To add a new development dependency, add to `requirements-dev.in` then run `pip-compile requirements-dev.in`
-
-To add a new dependency, add to `requirements.in` then run `pip-compile`
 
 
 docker

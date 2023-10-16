@@ -16,9 +16,9 @@ jobs:
     steps:
       - checkout
       - run:
-          name: install
+          name: install tooling
           command: |
-            pip install .[dev]
+            pip install pre-commit hatch
       - run:
           name: Run pre-commit checks again
           command: |
@@ -27,14 +27,16 @@ jobs:
       - run:
           name: Run tests
           command: |
-            mkdir -p server-test-reports/pytest
-            # --cov --cov-report xml:server-test-reports/coverage.xml  = report test coverage to a file
-            # --junitxml server-test-reports/pytest/tests.xml  = output also in XML to a file (for CircleCI to parse)
-            pytest tests/ -s --cov --cov-report xml:server-test-reports/coverage.xml --junitxml server-test-reports/pytest/tests.xml --log-cli-level ERROR
+            # --cov --cov-report html:test-reports/coverage.xml  = report test coverage to a file
+            # --junitxml test-reports/pytest/tests.xml  = output also in XML to a file (for CircleCI to parse)
+            hatch run python -m pytest tests/ --cov --cov-report html:test-reports/coverage --junitxml test-reports/pytest/tests.xml --log-cli-level ERROR
+
+      - store_artifacts:
+          path: test-reports
 
       - store_test_results:
           # must be a directory with named subdirectories
-          path: server-test-reports
+          path: test-reports
 
       - codecov/upload
 
@@ -59,7 +61,7 @@ jobs:
             docker/build.sh
       - when:
           condition:
-            equal: [main, << pipeline.git.branch >>]
+            equal: [master, << pipeline.git.branch >>]
           steps:
             - run:
                 name: Push to Dockerhub latest

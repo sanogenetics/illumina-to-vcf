@@ -1,9 +1,9 @@
 import logging
 from typing import Dict, FrozenSet, Iterable, Tuple
 
-from .BPMRecord import BPMRecord, IndelSourceSequence
-from .IlluminaBeadArrayFiles import RefStrand
-from .ReferenceGenome import ReferenceGenome
+from illumina2vcf.bpm.bpmrecord import BPMRecord, IndelSourceSequence
+from illumina2vcf.bpm.illuminabeadarrayfiles import RefStrand
+from illumina2vcf.bpm.referencegenome import ReferenceGenome
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,6 @@ class CSVManifestReader:
         in_data = False
         idx = -1
         for line in self._source:
-
             if line.startswith("IlmnID,"):
                 in_data = True
                 header = line.rstrip().lower().split(",")
@@ -54,8 +53,9 @@ class CSVManifestReader:
                 for required_column in self._required_columns:
                     try:
                         required_column2idx[required_column] = header.index(required_column)
-                    except:
-                        raise Exception("Manifest is missing required column " + required_column)
+                    except ValueError as err:
+                        msg = f"Manifest is missing required column {required_column}"
+                        raise RuntimeError(msg) from err
                 continue
 
             if line.startswith("[Controls]"):
@@ -76,7 +76,7 @@ class CSVManifestReader:
                     snp,
                     addressb_id,
                     probe_a,
-                ) = [bits[required_column2idx[column]] for column in self._required_columns]
+                ) = (bits[required_column2idx[column]] for column in self._required_columns)
 
                 if "D" in snp:
                     indel_source_sequence = IndelSourceSequence(source_seq)
@@ -123,7 +123,6 @@ class ManifestFilter:
     def filtered_records(self, manifest_reader: CSVManifestReader) -> Dict[Tuple[str, int], BPMRecord]:
         filtered_records = {}
         for record in manifest_reader.get_bpm_records():
-
             if record.chromosome == "0" or record.pos == 0:
                 continue
 

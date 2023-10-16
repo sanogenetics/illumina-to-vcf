@@ -4,10 +4,10 @@ from typing import Iterable, TextIO, Union
 
 from fsspec.core import OpenFile
 
-from .bpm.BPMReader import CSVManifestReader, ManifestFilter
-from .bpm.ReferenceGenome import ReferenceGenome
-from .illumina import IlluminaReader
-from .vcf import VCFMaker
+from illumina2vcf.bpm.bpmreader import CSVManifestReader, ManifestFilter
+from illumina2vcf.bpm.referencegenome import ReferenceGenome
+from illumina2vcf.illumina import IlluminaReader
+from illumina2vcf.vcf import VCFMaker
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ class Converter:
                 manifest_reader = CSVManifestReader(gzip.open(self.manifest_filename, "rt"), genome_reader)
             else:
                 logger.info(f"Reading uncompressed manifest {self.manifest_filename}")
-                manifest_reader = CSVManifestReader(open(self.manifest_filename, "rt"), genome_reader)
+                manifest_reader = CSVManifestReader(open(self.manifest_filename), genome_reader)
             indel_records = ManifestFilter(frozenset(), skip_snps=True).filtered_records(manifest_reader)
         else:
             indel_records = {}
@@ -58,7 +58,7 @@ class Converter:
         blocks = reader.generate_line_blocks(source)
 
         # generate vcf lines and qc info
-        vcf_lines = [line for line in vcfgenerator.generate_lines(blocks)]
+        vcf_lines = list(vcfgenerator.generate_lines(blocks))
 
         # write header
         for line in vcfgenerator.generate_header(date, header_source, self.buildname):
