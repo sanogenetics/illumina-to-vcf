@@ -1,8 +1,8 @@
 import logging
 from typing import Optional, Tuple
 
-from .IlluminaBeadArrayFiles import RefStrand
-from .ReferenceGenome import ReferenceGenome
+from illumina2vcf.bpm.illuminabeadarrayfiles import RefStrand
+from illumina2vcf.bpm.referencegenome import ReferenceGenome
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +93,7 @@ def max_suffix_match(str1: str, str2: str) -> int:
         Length of maximum suffix match
     """
     result = 0
-    for (char1, char2) in zip(str1[::-1], str2[::-1]):
+    for char1, char2 in zip(str1[::-1], str2[::-1]):
         assert char1 in "ACGT"
         if char1 in DEGENERACY_MAP[char2]:
             result += 1
@@ -114,7 +114,7 @@ def max_prefix_match(str1: str, str2: str) -> int:
         Length of maximum prefix match
     """
     result = 0
-    for (char1, char2) in zip(str1, str2):
+    for char1, char2 in zip(str1, str2):
         assert char1 in "ACGT"
         if char1 in DEGENERACY_MAP[char2]:
             result += 1

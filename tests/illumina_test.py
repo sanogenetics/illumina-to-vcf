@@ -1,5 +1,5 @@
 import itertools
-from typing import Iterable, Tuple
+from typing import Tuple
 
 import pytest
 
@@ -15,7 +15,7 @@ class TestIllumina:
         GIVEN an illumina header
         """
         reader = IlluminaReader(sep)
-        header = f"""[Header]
+        header = """[Header]
 GSGT Version	2.0.4
 Processing Date	2022-06-02 9:25 AM
 Content		GSAMD-24v3-0-EA_20034606_A2.bpm
@@ -80,7 +80,7 @@ Total Samples	24"""
             # each block should be fully divisible by the number of samples
             assert len(block) % len(samples) == 0
             # all lines in a block should have the same chromosome and position
-            assert len(set((i.chrom for i in block))) == 1
-            assert len(set((i.pos for i in block))) == 1
+            assert len(set(i.chrom for i in block)) == 1
+            assert len(set(i.pos for i in block)) == 1
             # each line should have a unique sample and snp ids
-            assert len(set(((i.sample_id, i.snp_name) for i in block))) == len(block)
+            assert len(set((i.sample_id, i.snp_name) for i in block)) == len(block)

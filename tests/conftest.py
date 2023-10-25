@@ -5,7 +5,7 @@ from datetime import datetime
 from io import StringIO
 from typing import Any, Dict, Generator, Iterable, List, Tuple
 
-from illumina2vcf.bpm.BPMRecord import COMPLEMENT_MAP
+from illumina2vcf.bpm.bpmrecord import COMPLEMENT_MAP
 
 
 @dataclass
@@ -47,7 +47,7 @@ class IlluminaBuilder:
         return self
 
     def _generate_probes(self) -> Generator[Probe, None, None]:
-        with open("tests/data/GSA-24v3-0_A2.trim.csv", "rt") as infile:
+        with open("tests/data/GSA-24v3-0_A2.trim.csv") as infile:
             # read through the header
             for line in infile:
                 if line.strip() == "[Assay]":

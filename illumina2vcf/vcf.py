@@ -1,13 +1,14 @@
+import contextlib
 import logging
 import re
-from typing import Dict, Generator, Iterable, List, Literal, Tuple
+from typing import Dict, Generator, Iterable, List, Literal, Optional, Tuple
 
 from puretabix.vcf import VCFLine
 
-from .bpm.BPMRecord import BPMRecord
-from .bpm.IlluminaBeadArrayFiles import RefStrand
-from .bpm.ReferenceGenome import ReferenceGenome
-from .illumina import IlluminaRow
+from illumina2vcf.bpm.bpmrecord import BPMRecord
+from illumina2vcf.bpm.illuminabeadarrayfiles import RefStrand
+from illumina2vcf.bpm.referencegenome import ReferenceGenome
+from illumina2vcf.illumina import IlluminaRow
 
 STRANDSWAP = {"A": "T", "T": "A", "C": "G", "G": "C", "I": "I", "D": "D"}
 
@@ -18,7 +19,7 @@ class ConverterError(Exception):
     pass
 
 
-class QC_stats:
+class QcStats:
     def __init__(self):
         self.vcf_lines_autosomal = 0
         self.called_lines_autosomal = 0
@@ -28,28 +29,17 @@ class QC_stats:
         self.vcf_lines_y = 0
         self.called_lines_y = 0
 
-    def vcf_comment(self) -> str:
+    def vcf_comment(self) -> Optional[VCFLine]:
         qc_stats = {}
-        try:
+        with contextlib.suppress(ZeroDivisionError):
             qc_stats["callrate"] = f"{self.call_rate('autosomal'):.2f}"
-        except ZeroDivisionError:
-            pass
-        try:
+        with contextlib.suppress(ZeroDivisionError):
             qc_stats["y_notnull"] = f"{self.call_rate('Y'):.2f}"
-        except ZeroDivisionError:
-            pass
-        try:
+        with contextlib.suppress(ZeroDivisionError):
             qc_stats["het"] = f"{self.heterozygosity('autosomal'):.2f}"
-        except ZeroDivisionError:
-            pass
-        try:
+        with contextlib.suppress(ZeroDivisionError):
             qc_stats["x_het"] = f"{self.heterozygosity('X'):.2f}"
-        except ZeroDivisionError:
-            pass
-        if qc_stats:
-            return VCFLine.as_comment_key_dict("qc_stats", qc_stats)
-        else:
-            pass
+        return VCFLine.as_comment_key_dict("qc_stats", qc_stats) if qc_stats else None
 
     def call_rate(self, chrom: Literal["autosomal", "Y"]) -> float:
         if chrom == "autosomal":
@@ -57,7 +47,8 @@ class QC_stats:
         elif chrom == "Y":
             return self.called_lines_y / self.vcf_lines_y
         else:
-            raise NotImplementedError(f"cannot calculate call rate for chrom {chrom}")
+            msg = f"cannot calculate call rate for chrom {chrom}"
+            raise NotImplementedError(msg)
 
     def heterozygosity(self, chrom: Literal["autosomal", "X"]) -> float:
         if chrom == "autosomal":
@@ -65,27 +56,28 @@ class QC_stats:
         elif chrom == "X":
             return self.heterozygous_lines_x / self.called_lines_x
         else:
-            raise NotImplementedError(f"cannot calculate heterozygosity for chrom {chrom}")
+            msg = f"cannot calculate heterozygosity for chrom {chrom}"
+            raise NotImplementedError(msg)
 
     def _update_qc_stats(self, vcfline: VCFLine) -> None:
         gt = vcfline.sample[0]["GT"]
         chm = vcfline.chrom
-        if chm == "chrX":
+        if chm == "chrM":
+            pass
+        elif chm == "chrX":
             if gt != "./.":
                 self.called_lines_x += 1
-                if len(set(gt.split("/"))) == 2:
+                if len(set(gt.split("/"))) == 2:  # noqa: PLR2004
                     self.heterozygous_lines_x += 1
         elif chm == "chrY":
             self.vcf_lines_y += 1
             if gt != "./.":
                 self.called_lines_y += 1
-        elif chm == "chrM":
-            pass
         else:
             self.vcf_lines_autosomal += 1
             if gt != "./.":
                 self.called_lines_autosomal += 1
-                if len(set(gt.split("/"))) == 2:
+                if len(set(gt.split("/"))) == 2:  # noqa: PLR2004
                     self.heterozygous_lines_autosomal += 1
 
 
@@ -93,10 +85,10 @@ class VCFMaker:
     _genome_reader: ReferenceGenome
     _indel_records: Dict
 
-    def __init__(self, genome_reader: ReferenceGenome, indel_records: Dict = {}):
+    def __init__(self, genome_reader: ReferenceGenome, indel_records: Optional[Dict] = None):
+        self._indel_records = {} if indel_records is None else indel_records
         self._genome_reader = genome_reader
-        self._indel_records = indel_records
-        self.qc_stats = QC_stats()
+        self.qc_stats = QcStats()
 
     @staticmethod
     def is_valid_chromosome(chrom: str) -> bool:
@@ -130,8 +122,7 @@ class VCFMaker:
                     {"ID": chrom, "length": rec.rlen, "assembly": buildname},
                 )
         # ##qc_stats=<callrate=0.99,het=0.33,x_het=0.21,y_notnull=0.24>
-        qc_stats = self.qc_stats.vcf_comment()
-        if qc_stats:
+        if qc_stats := self.qc_stats.vcf_comment():
             yield qc_stats
 
     def generate_lines(self, blocks: Iterable[List[IlluminaRow]]) -> Generator[VCFLine, None, None]:
@@ -175,7 +166,8 @@ class VCFMaker:
     def _line_block_to_vcf_line(self, block: List[IlluminaRow], sample_set) -> VCFLine:
         # if block is silly big skip it (first block will be included regardless of size)
         if sample_set and len(block) > 10 * len(sample_set):
-            raise ConverterError(f"Oversized block {block[0].chrom}:{block[0].pos}: {len(block)} rows")
+            msg = f"Oversized block {block[0].chrom}:{block[0].pos}: {len(block)} rows"
+            raise ConverterError(msg)
 
         # if we've not got a list of samples yet, get them from this block unfiltered
         if not sample_set:
@@ -195,35 +187,37 @@ class VCFMaker:
         #  unique sample names
         #  had consistent calls
 
-        snp_names = tuple(sorted(frozenset([r.snp_name for r in block])))
+        snp_names = tuple(sorted(frozenset(r.snp_name for r in block)))
 
         chm = block[0].chrom
         # convert pseudoautosomal (XY) to X
-        if chm == "XY" or chm == "chrXY":
+        if chm in ("XY", "chrXY"):
             chm = "chrX"
         # convert MT to M
-        if chm == "MT" or chm == "chrMT":
+        if chm in ("MT", "chrMT"):
             chm = "chrM"
         # force chr prefix
         if not chm.startswith("chr"):
             chm = f"chr{chm}"
         if chm not in self._genome_reader.reference_fasta.faidx.index:
-            raise ConverterError(f"Unexpected chromosome {chm}:{block[0].pos}")
+            msg = f"Unexpected chromosome {chm}:{block[0].pos}"
+            raise ConverterError(msg)
         if not self.is_valid_chromosome(chm):
-            raise ConverterError(f"Invalid chromosome {chm}:{block[0].pos}")
+            msg = f"Invalid chromosome {chm}:{block[0].pos}"
+            raise ConverterError(msg)
         pos = int(block[0].pos)
 
         ref = self._genome_reader.get_reference_bases(chm, pos - 1, pos)
         if not ref:
-            raise ConverterError(f"Unable to get reference {chm}:{pos-1}-{pos}")
+            msg = f"Unable to get reference {chm}:{pos-1}-{pos}"
+            raise ConverterError(msg)
 
         converted_calls = {}
         # handel indels
         if "I" in probed or "D" in probed:
             if probed.intersection({"A", "C", "G", "T"}):
-                raise ConverterError(
-                    f"{';'.join(snp_names)}: contains indels and SNPs ({','.join(probed)}) {block[0].chrom}:{block[0].pos}"
-                )
+                msg = f"{';'.join(snp_names)}: contains indels and SNPs ({','.join(probed)}) {block[0].chrom}:{block[0].pos}"
+                raise ConverterError(msg)
 
             if (chm, pos) in self._indel_records:
                 # get the records in the manifest for this locaion
@@ -234,9 +228,8 @@ class VCFMaker:
                 # check the other lotus records have the same reference + alternative alleles
                 for alt_record in locus_records[1:]:
                     if (ref, alt, pos) != self.get_alleles_for_indel(alt_record):
-                        raise ConverterError(
-                            f"{';'.join(snp_names)}: Mismatched alleles ({','.join(probed)}) {block[0].chrom}:{block[0].pos}"
-                        )
+                        msg = f"{';'.join(snp_names)}: Mismatched alleles ({','.join(probed)}) {block[0].chrom}:{block[0].pos}"
+                        raise ConverterError(msg)
                 # Illumina position is the position of the insertion (ie; one base after the ref allele)
                 # We want the position of the start of the ref allele, so we need to reduce pos by 1
 
@@ -244,7 +237,8 @@ class VCFMaker:
                 alt = (alt,)
 
             else:
-                raise ConverterError(f"{';'.join(snp_names)}: No BPM record for indel ({','.join(probed)}) {chm}:{pos}")
+                msg = f"{';'.join(snp_names)}: No BPM record for indel ({','.join(probed)}) {chm}:{pos}"
+                raise ConverterError(msg)
 
             for sampleid in calls:
                 converted_calls[sampleid] = self.convert_indel_genotype_to_vcf(
@@ -254,9 +248,8 @@ class VCFMaker:
             # SNPs
             # handle ref/alt split
             if ref not in probed:
-                raise ConverterError(
-                    f"{';'.join(snp_names)}: Reference ({ref}) not probed ({','.join(probed)}) {block[0].chrom}:{block[0].pos}"
-                )
+                msg = f"{';'.join(snp_names)}: Reference ({ref}) not probed ({','.join(probed)}) {block[0].chrom}:{block[0].pos}"
+                raise ConverterError(msg)
             probed.remove(ref)
 
             # alt may not be used, but is what the microarray could check for
@@ -271,7 +264,8 @@ class VCFMaker:
                 elif allele1 == ref:
                     allele1n = "0"
                 elif allele1 not in alt:
-                    raise ConverterError(f"Unexpected forward {block[0].chrom}:{block[0].pos} {allele1} vs {ref}/{alt}")
+                    msg = f"Unexpected forward {block[0].chrom}:{block[0].pos} {allele1} vs {ref}/{alt}"
+                    raise ConverterError(msg)
                 else:
                     allele1n = str(1 + alt.index(allele1))
 
@@ -281,18 +275,17 @@ class VCFMaker:
                 elif allele2 == ref:
                     allele2n = "0"
                 elif allele2 not in alt:
-                    raise ConverterError(f"Unexpected forward {block[0].chrom}:{block[0].pos} {allele2} vs {ref}/{alt}")
+                    msg = f"Unexpected forward {block[0].chrom}:{block[0].pos} {allele2} vs {ref}/{alt}"
+                    raise ConverterError(msg)
                 else:
                     allele2n = str(1 + alt.index(allele2))
 
-                assert sampleid not in converted_calls
+                assert sampleid not in converted_calls  # noqa: S101
                 converted_calls[sampleid] = self.format_vcf_genotype(allele1n, allele2n)
 
         # always need to have all samples on all rows
         # even if that samples has been filtered out e.g. conflicting probes
-        samples = []
-        for sampleid in sample_set:
-            samples.append({"GT": converted_calls.get(sampleid, "./.")})
+        samples = [{"GT": converted_calls.get(sampleid, "./.")} for sampleid in sample_set]
 
         vcfline = VCFLine("", "", "", {}, chm, pos, snp_names, ref, alt, ".", ["PASS"], {}, samples)
 
@@ -314,11 +307,10 @@ class VCFMaker:
         (_, indel_sequence, _) = bpm_record.get_indel_source_sequences(RefStrand.Plus)
         start_index = bpm_record.pos - 1
         chrom = bpm_record.chromosome
-        if chrom == "XX" or chrom == "XY":
+        if chrom in ("XX", "XY"):
             chrom = "X"
 
         if bpm_record.is_deletion:
-
             reference_base = self._genome_reader.get_reference_bases(chrom, start_index - 1, start_index)
             reference_allele = reference_base + indel_sequence
             alternate_allele = reference_base
@@ -340,12 +332,11 @@ class VCFMaker:
             string: String representation of genotype (e.g., "0/1")
         """
 
-        vcf_genotype = ""
-        if vcf_allele2_char < vcf_allele1_char:
-            vcf_genotype = str(vcf_allele2_char) + "/" + str(vcf_allele1_char)
-        else:
-            vcf_genotype = str(vcf_allele1_char) + "/" + str(vcf_allele2_char)
-        return vcf_genotype
+        return (
+            f"{vcf_allele2_char!s}/{vcf_allele1_char!s}"
+            if vcf_allele2_char < vcf_allele1_char
+            else f"{vcf_allele1_char!s}/{vcf_allele2_char!s}"
+        )
 
     def convert_indel_genotype_to_vcf(self, nucleotide_genotypes, is_deletion):
         """
@@ -366,9 +357,7 @@ class VCFMaker:
             vcf_allele1_char = "1" if nucleotide_genotypes[0] == "I" else "0"
             vcf_allele2_char = "1" if nucleotide_genotypes[1] == "I" else "0"
 
-        vcf_genotype = self.format_vcf_genotype(vcf_allele1_char, vcf_allele2_char)
-
-        return vcf_genotype
+        return self.format_vcf_genotype(vcf_allele1_char, vcf_allele2_char)
 
     def _simplify_block(self, block: List[IlluminaRow]) -> Tuple[Dict[str, Tuple[str, str]], set]:
         combined_probes = {}
@@ -381,7 +370,8 @@ class VCFMaker:
             probes = row.snp
             match = re.match(r"\[([ATCGID]+)\/([ATCGID]+)\]", probes)
             if not match:
-                raise ConverterError(f"Unexpcted probes {row.chrom}:{row.pos} {probes}")
+                msg = f"Unexpcted probes {row.chrom}:{row.pos} {probes}"
+                raise ConverterError(msg)
 
             new_probes = match.group(1, 2)
             # exclude indel probes
@@ -390,7 +380,7 @@ class VCFMaker:
 
             # swap strand if needed
             if strand == "-":
-                new_probes = tuple((STRANDSWAP[probe] for probe in new_probes))
+                new_probes = tuple(STRANDSWAP[probe] for probe in new_probes)
 
             new_calls = (row.allele1, row.allele2)
 
@@ -405,11 +395,11 @@ class VCFMaker:
                     calls[sampleid] = self._combine_calls(
                         calls[sampleid], new_calls, tuple(combined_probes[sampleid]), new_probes
                     )
-                except ConverterError as e:
+                except ConverterError:
                     conflicts.append(sampleid)
                 combined_probes[sampleid].update(new_probes)
 
-        probed = set().union(*[combined_probes[sampleid] for sampleid in combined_probes.keys()])
+        probed = set().union(*[combined_probes[sampleid] for sampleid in combined_probes])
 
         # for all samples with conflicting genotype calls, set the call to no call
         for sampleid in conflicts:
@@ -424,19 +414,21 @@ class VCFMaker:
         previous_probes: Tuple[str, ...],
         new_probes: Tuple[str, ...],
     ):
-        if previous_calls == new_calls or previous_calls == new_calls[::-1] or new_calls == ("-", "-"):
+        if previous_calls in (new_calls, new_calls[::-1]):
             return previous_calls
         elif new_calls[0] == new_calls[1] and new_calls[0] in previous_calls:
-            if not new_probes[0] in previous_calls or not new_probes[1] in previous_calls:
-                return previous_calls  # conflicting call is a homozygote where only one of the probes matches the true genotype
+            if new_probes[0] not in previous_calls or new_probes[1] not in previous_calls:
+                return (
+                    previous_calls
+                )  # conflicting call is a homozygote where only one of the probes matches the true genotype
             else:
-                raise ConverterError("conflict!")  # both probes match but different call
+                raise ConverterError("conflict!")  # both probes match but different call  # noqa: EM101
         elif previous_calls == ("-", "-"):
             return new_calls
         elif previous_calls[0] == previous_calls[1] and previous_calls[0] in new_calls:
             if new_probes[0] not in previous_probes or new_probes[1] not in previous_probes:
                 return new_calls  # conflicting call is a het where only one of the probes has been tested previously (and previous call is homozygous)
             else:
-                raise ConverterError("conflict!")  # both probes match but different call
+                raise ConverterError("conflict!")  # both probes match but different call  # noqa: EM101
         else:
-            raise ConverterError("conflict!")  # conflicting hets or conflicting homozygotes
+            raise ConverterError("conflict!")  # conflicting hets or conflicting homozygotes  # noqa: EM101

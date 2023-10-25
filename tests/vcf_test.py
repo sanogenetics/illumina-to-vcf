@@ -4,8 +4,8 @@ from typing import Dict, List, Tuple
 from pytest import fixture, mark
 
 from illumina2vcf import IlluminaReader, VCFMaker
-from illumina2vcf.bpm.BPMReader import CSVManifestReader, ManifestFilter
-from illumina2vcf.bpm.ReferenceGenome import ReferenceGenome
+from illumina2vcf.bpm.bpmreader import CSVManifestReader, ManifestFilter
+from illumina2vcf.bpm.referencegenome import ReferenceGenome
 
 from .conftest import IlluminaBuilder
 
@@ -28,7 +28,6 @@ def genome_reader() -> ReferenceGenome:
 
 class TestVCF:
     def test_header_only(self, genome_reader):
-
         """
         GIVEN a VCF generator
         """
@@ -37,7 +36,7 @@ class TestVCF:
         """
         WHEN generating a header
         """
-        lines = tuple((str(i) for i in vcfgenerator.generate_header("date", "source", "build")))
+        lines = tuple(str(i) for i in vcfgenerator.generate_header("date", "source", "build"))
         """
         THEN it should produce valid header output
         """
@@ -61,10 +60,7 @@ class TestVCF:
         WHEN generating a header
         """
         lines = tuple(
-            (
-                str(i)
-                for i in vcfgenerator.generate_header("2022-03-25 9:20 AM", "GSAMD-24v3-0-EA_20034606_A2", "GRCh38")
-            )
+            str(i) for i in vcfgenerator.generate_header("2022-03-25 9:20 AM", "GSAMD-24v3-0-EA_20034606_A2", "GRCh38")
         )
         """
         THEN it should produce valid header output
@@ -124,17 +120,17 @@ class TestVCF:
                 continue
             assert line.ref
             assert line.alt
-            assert max((len(i) for i in line.alt))
+            assert max(len(i) for i in line.alt)
             assert len(line.sample) == 1
             maxref = max(maxref, len(line.ref))
-            maxalt = max(maxalt, max((len(i) for i in line.alt)))
+            maxalt = max(maxalt, max(len(i) for i in line.alt))
         assert maxref == 1
         assert maxalt == 1
 
     @mark.parametrize(
         "manifest_file",
         [
-            open("tests/data/GSA-24v3-0_A2.trim.csv", "rt"),
+            open("tests/data/GSA-24v3-0_A2.trim.csv"),
             gzip.open("tests/data/GSA-24v3-0_A2.trim.csv.gz", "rt"),
         ],
         ids=["txt", "gz"],
@@ -175,10 +171,10 @@ class TestVCF:
                 continue
             assert line.ref
             assert line.alt
-            assert max((len(i) for i in line.alt))
+            assert max(len(i) for i in line.alt)
             assert len(line.sample) == 1
             maxref = max(maxref, len(line.ref))
-            maxalt = max(maxalt, max((len(i) for i in line.alt)))
+            maxalt = max(maxalt, max(len(i) for i in line.alt))
 
             if line._id[0] in rsidlines.keys():
                 rsid = line._id[0]

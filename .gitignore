@@ -9,4 +9,6 @@ venv/
 **__pycache__
 .vscode
 tmp/
+dist
 .coverage
+server-test-reports

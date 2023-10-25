@@ -1,11 +1,10 @@
-from typing import Dict, Generator, Iterable, List, Tuple, Union
+from typing import Union
 
 from fsspec.core import OpenFile
 from pyfaidx import Fasta
 
 
 class ReferenceGenome:
-
     reference: Union[str, OpenFile]
     reference_index: Union[str, OpenFile]
     reference_fasta: Fasta
@@ -19,7 +18,7 @@ class ReferenceGenome:
             read_ahead=1024 * 16,  # 16kb read ahead buffer
         )
 
-    def get_reference_bases(self, chrom, start, end):
+    def get_reference_bases(self, chrom: str, start: int, end: int) -> str:
         """
         Get the reference bases from start to end
         Args:
@@ -32,11 +31,14 @@ class ReferenceGenome:
             ValueError - Invalid arguments
         """
         if start >= end:
-            raise ValueError("Start/stop coordinates incorrect for: " + str(chrom) + ":" + str(start) + "-" + str(end))
+            msg = f"Start/stop coordinates incorrect for: {chrom!s}:{start!s}-{end!s}"
+            raise ValueError(msg)
+
         # force chr prefix
         if not chrom.startswith("chr"):
             chrom = f"chr{chrom}"
+
         if chrom not in self.reference_fasta:
-            raise ValueError("FASTA reference is missing entry for chromosome " + str(chrom))
-        ref_base = str(self.reference_fasta[chrom][start:end])
-        return ref_base
+            msg = f"FASTA reference is missing entry for chromosome {chrom!s}"
+            raise ValueError(msg)
+        return str(self.reference_fasta[chrom][start:end])

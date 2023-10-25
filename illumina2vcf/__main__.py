@@ -4,12 +4,11 @@ import sys
 
 import fsspec
 
-from . import Converter
+from illumina2vcf import Converter
 
 logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
-
     logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
     parser = argparse.ArgumentParser()
     parser.add_argument("fasta", help="path to reference fasta, and .fai index")
@@ -25,10 +24,20 @@ if __name__ == "__main__":
 
     if args.fasta.startswith("s3://"):
         converter = Converter(
-            fsspec.open(args.fasta), fsspec.open(args.fasta + ".fai"), args.blocklist, args.manifest, args.delim
+            fsspec.open(args.fasta),  # type: ignore
+            fsspec.open(f"{args.fasta}.fai"),  # type: ignore
+            args.blocklist,
+            args.manifest,
+            args.delim,
         )
     else:
-        converter = Converter(args.fasta, args.fasta + ".fai", args.blocklist, args.manifest, args.delim)
+        converter = Converter(
+            args.fasta,
+            f"{args.fasta}.fai",
+            args.blocklist,
+            args.manifest,
+            args.delim,
+        )
 
     # read from stdin as uncompressed text
     # write to stdout as uncompressed vcf
