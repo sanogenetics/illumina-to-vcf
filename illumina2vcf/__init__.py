@@ -46,10 +46,10 @@ class Converter:
             else:
                 logger.info(f"Reading uncompressed manifest {self.manifest_filename}")
                 manifest_reader = CSVManifestReader(open(self.manifest_filename), genome_reader)
-            indel_records = ManifestFilter(frozenset(), skip_snps=True).filtered_records(manifest_reader)
+            bpm_records = ManifestFilter(frozenset(), skip_snps=False).filtered_records(manifest_reader)
         else:
-            indel_records = {}
-        vcfgenerator = VCFMaker(genome_reader, indel_records)
+            bpm_records = {}
+        vcfgenerator = VCFMaker(genome_reader, bpm_records)
 
         # read source header
         date, header_source = reader.parse_header(source)

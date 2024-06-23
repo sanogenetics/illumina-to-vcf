@@ -83,10 +83,10 @@ class QcStats:
 
 class VCFMaker:
     _genome_reader: ReferenceGenome
-    _indel_records: Dict
+    _bpm_records: Dict
 
-    def __init__(self, genome_reader: ReferenceGenome, indel_records: Optional[Dict] = None):
-        self._indel_records = {} if indel_records is None else indel_records
+    def __init__(self, genome_reader: ReferenceGenome, bpm_records: Optional[Dict] = None):
+        self._bpm_records = {} if bpm_records is None else bpm_records
         self._genome_reader = genome_reader
         self.qc_stats = QcStats()
 
@@ -219,13 +219,13 @@ class VCFMaker:
                 msg = f"{';'.join(snp_names)}: contains indels and SNPs ({','.join(probed)}) {block[0].chrom}:{block[0].pos}"
                 raise ConverterError(msg)
 
-            if (chm, pos) in self._indel_records:
+            if (chm, pos) in self._bpm_records:
                 # get the records in the manifest for this locaion
-                locus_records = self._indel_records[(chm, pos)]
+                locus_records = self._bpm_records[(chm, pos)]
 
                 (ref, alt, pos) = self.get_alleles_for_indel(locus_records[0])
 
-                # check the other lotus records have the same reference + alternative alleles
+                # check the other locus records have the same reference + alternative alleles
                 for alt_record in locus_records[1:]:
                     if (ref, alt, pos) != self.get_alleles_for_indel(alt_record):
                         msg = f"{';'.join(snp_names)}: Mismatched alleles ({','.join(probed)}) {block[0].chrom}:{block[0].pos}"
@@ -374,9 +374,6 @@ class VCFMaker:
                 raise ConverterError(msg)
 
             new_probes = match.group(1, 2)
-            # exclude indel probes
-            # if new_probes[0] not in "ATCG" or new_probes[1] not in "ATCG":
-            #    raise ConverterError(f"Not a SNV probe {row.chrom}:{row.pos} {probes}")
 
             # swap strand if needed
             if strand == "-":
