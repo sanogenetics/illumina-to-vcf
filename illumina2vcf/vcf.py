@@ -422,6 +422,8 @@ class VCFMaker:
                 raise ConverterError("conflict!")  # both probes match but different call  # noqa: EM101
         elif previous_calls == ("-", "-"):
             return new_calls
+        elif new_calls == ("-", "-"):
+            return previous_calls
         elif previous_calls[0] == previous_calls[1] and previous_calls[0] in new_calls:
             if new_probes[0] not in previous_probes or new_probes[1] not in previous_probes:
                 return new_calls  # conflicting call is a het where only one of the probes has been tested previously (and previous call is homozygous)

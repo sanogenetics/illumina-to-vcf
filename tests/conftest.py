@@ -10,6 +10,7 @@ from illumina2vcf.bpm.bpmrecord import COMPLEMENT_MAP
 
 @dataclass
 class Probe:
+    ilmn_id: str
     name: str
     chrom: str
     pos: int
@@ -24,10 +25,12 @@ class IlluminaBuilder:
     _rng: random.Random
     _data_header_full: bool = True
     _samples: Tuple[str, ...]
+    _genotypes: Dict[str, Tuple[str, str]]
 
     def __init__(self):
         self._rng = random.Random(42)
         self._samples = ("sample1",)
+        self._genotypes = ()
         pass
 
     def sano(self, sano: bool) -> "IlluminaBuilder":
@@ -46,6 +49,10 @@ class IlluminaBuilder:
         self._samples = tuple(samples)
         return self
 
+    def genotypes(self, genotypes: Iterable[str]) -> "IlluminaBuilder":
+        self._genotypes = genotypes
+        return self
+
     def _generate_probes(self) -> Generator[Probe, None, None]:
         with open("tests/data/GSA-24v3-0_A2.trim.csv") as infile:
             # read through the header
@@ -56,6 +63,7 @@ class IlluminaBuilder:
             reader = csv.DictReader(infile)
             for row in reader:
                 yield Probe(
+                    ilmn_id = row["IlmnID"],
                     name=row["Name"],
                     chrom=row["Chr"],
                     pos=int(row["MapInfo"]),
@@ -109,6 +117,7 @@ class IlluminaBuilder:
             return tuple(
                 (
                     "Sample ID",
+                    "IlmnID",
                     "RsID",
                     "GC Score",
                     "SNP Name",
@@ -146,6 +155,7 @@ class IlluminaBuilder:
             return tuple(
                 (
                     "Sample ID",
+                    "IlmnID",
                     "SNP Name",
                     "Sample Name",
                     "Chr",
@@ -157,7 +167,7 @@ class IlluminaBuilder:
                 )
             )
 
-    def _generate_data_lines(self, probes) -> Generator[str, None, None]:
+    def _generate_data_lines(self, probes, genotypes = None) -> Generator[str, None, None]:
         header = self._generate_data_header()
         yield "[Data]"
         yield "\t".join(header)
@@ -167,6 +177,7 @@ class IlluminaBuilder:
                 data = {}
                 data["Sample ID"] = sample
                 data["Sample Index"] = i
+                data["IlmnID"] = probe.ilmn_id
                 data["SNP Name"] = probe.name
                 data["Chr"] = probe.chrom
                 data["Position"] = probe.pos
@@ -175,8 +186,14 @@ class IlluminaBuilder:
                 alleles = (
                     [COMPLEMENT_MAP[probe.a], COMPLEMENT_MAP[probe.b]] if probe.strand == "-" else [probe.a, probe.b]
                 )
-                data["Allele1 - Plus"] = self._rng.choice(alleles)
-                data["Allele2 - Plus"] = self._rng.choice(alleles)
+                if probe.ilmn_id in self._genotypes:
+                    assert self._genotypes[probe.ilmn_id][0] in alleles or self._genotypes[probe.ilmn_id][0] == '-'
+                    data["Allele1 - Plus"] = self._genotypes[probe.ilmn_id][0]
+                    assert self._genotypes[probe.ilmn_id][1] in alleles or self._genotypes[probe.ilmn_id][1] == '-'
+                    data["Allele2 - Plus"] = self._genotypes[probe.ilmn_id][1]
+                else:
+                    data["Allele1 - Plus"] = self._rng.choice(alleles)
+                    data["Allele2 - Plus"] = self._rng.choice(alleles)
                 yield self._map_to_line(header, data)
 
     def _generate_lines(self) -> Generator[str, None, None]:
