@@ -25,7 +25,7 @@ class IlluminaBuilder:
     _rng: random.Random
     _data_header_full: bool = True
     _samples: Tuple[str, ...]
-    _genotypes: Dict[str, Tuple[str, str]]
+    _genotypes: Dict[str, Dict[str, Tuple[str, str]]]
 
     def __init__(self):
         self._rng = random.Random(42)
@@ -187,10 +187,12 @@ class IlluminaBuilder:
                     [COMPLEMENT_MAP[probe.a], COMPLEMENT_MAP[probe.b]] if probe.strand == "-" else [probe.a, probe.b]
                 )
                 if probe.ilmn_id in self._genotypes:
-                    assert self._genotypes[probe.ilmn_id][0] in alleles or self._genotypes[probe.ilmn_id][0] == '-'
-                    data["Allele1 - Plus"] = self._genotypes[probe.ilmn_id][0]
-                    assert self._genotypes[probe.ilmn_id][1] in alleles or self._genotypes[probe.ilmn_id][1] == '-'
-                    data["Allele2 - Plus"] = self._genotypes[probe.ilmn_id][1]
+                    allele1 = self._genotypes[probe.ilmn_id][sample][0]
+                    assert allele1 in alleles or allele1 == '-'
+                    data["Allele1 - Plus"] = allele1
+                    allele2 = self._genotypes[probe.ilmn_id][sample][1]
+                    assert allele2 in alleles or allele2 == '-'
+                    data["Allele2 - Plus"] = allele2
                 else:
                     data["Allele1 - Plus"] = self._rng.choice(alleles)
                     data["Allele2 - Plus"] = self._rng.choice(alleles)
