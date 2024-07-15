@@ -4,7 +4,6 @@ import gzip
 from typing import Dict, List, Tuple
 
 from pytest import fixture, mark
-from dataclasses import dataclass
 
 from illumina2vcf import IlluminaReader, VCFMaker
 from illumina2vcf.vcf import Probe, STRANDSWAP

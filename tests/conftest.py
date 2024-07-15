@@ -7,9 +7,8 @@ from typing import Any, Dict, Generator, Iterable, List, Tuple
 
 from illumina2vcf.bpm.bpmrecord import COMPLEMENT_MAP
 
-
 @dataclass
-class Probe:
+class ProbeInfo:
     ilmn_id: str
     name: str
     chrom: str
@@ -53,7 +52,7 @@ class IlluminaBuilder:
         self._genotypes = genotypes
         return self
 
-    def _generate_probes(self) -> Generator[Probe, None, None]:
+    def _generate_probes(self) -> Generator[ProbeInfo, None, None]:
         with open("tests/data/GSA-24v3-0_A2.trim.csv") as infile:
             # read through the header
             for line in infile:
@@ -62,7 +61,7 @@ class IlluminaBuilder:
             # switch to CSV
             reader = csv.DictReader(infile)
             for row in reader:
-                yield Probe(
+                yield ProbeInfo(
                     ilmn_id = row["IlmnID"],
                     name=row["Name"],
                     chrom=row["Chr"],
@@ -72,8 +71,8 @@ class IlluminaBuilder:
                     strand=row["RefStrand"],
                 )
 
-    def _generate_sorted_probes(self) -> List[Probe]:
-        def probekey(probe: Probe) -> Tuple[str, int, int]:
+    def _generate_sorted_probes(self) -> List[ProbeInfo]:
+        def probekey(probe: ProbeInfo) -> Tuple[str, int, int]:
             if probe.chrom.isnumeric():
                 return ("", int(probe.chrom), probe.pos)
             else:
@@ -81,10 +80,10 @@ class IlluminaBuilder:
 
         return sorted(self._generate_probes(), key=probekey)
 
-    def _generate_unsorted_probes(self) -> List[Probe]:
+    def _generate_unsorted_probes(self) -> List[ProbeInfo]:
         # convert positions to string before sorting so that they will be out of
         # order (this assumes that there are positions with different numbers of digits)
-        def str_probekey(probe: Probe) -> Tuple[str, int, str]:
+        def str_probekey(probe: ProbeInfo) -> Tuple[str, int, str]:
             if probe.chrom.isnumeric():
                 return ("", int(probe.chrom), str(probe.pos))
             else:
