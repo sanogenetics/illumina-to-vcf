@@ -1,14 +1,16 @@
+import itertools
+import re
 import gzip
 from typing import Dict, List, Tuple
 
 from pytest import fixture, mark
 
 from illumina2vcf import IlluminaReader, VCFMaker
+from illumina2vcf.vcf import Probe, STRANDSWAP
 from illumina2vcf.bpm.bpmreader import CSVManifestReader, ManifestFilter
 from illumina2vcf.bpm.referencegenome import ReferenceGenome
 
 from .conftest import IlluminaBuilder
-
 
 @fixture
 def blocks() -> Tuple[List[Dict[str, str]], ...]:
@@ -18,6 +20,59 @@ def blocks() -> Tuple[List[Dict[str, str]], ...]:
     blocks = tuple(reader.generate_line_blocks(illumina))
     return blocks
 
+@fixture
+def genotypes() -> Dict[str, Dict[str, Tuple]]:
+    genotypes = {'rs76584377-138_Inf2_C_T': {'Sample0': ('C', 'T'),
+                                                 'Sample1': ('C', 'T'),
+                                                 'Sample2': ('C', 'C'),
+                                                 'Sample3': ('C', 'C'),
+                                                 'Sample4': ('C', 'C'),
+                                                 'Sample5': ('C', 'C'),
+                                                 'Sample6': ('C', 'T'),
+                                                 'Sample7': ('C', 'T'),
+                                                 'Sample8': ('T', 'T'),
+                                                },
+                     'rs76584377-138_Inf1_C_T': {'Sample0': ('C', 'T'),
+                                                 'Sample1': ('C', 'T'),
+                                                 'Sample2': ('C', 'C'),
+                                                 'Sample3': ('C', 'C'),
+                                                 'Sample4': ('C', 'C'),
+                                                 'Sample5': ('C', 'T'),
+                                                 'Sample6': ('C', 'T'),
+                                                 'Sample7': ('T', 'T'),
+                                                 'Sample8': ('T', 'T'),
+                                                 },
+                     'rs76584377-138_Inf1_C_G': {'Sample0': ('C', 'C'),
+                                                 'Sample1': ('-', '-'),
+                                                 'Sample2': ('-', '-'),
+                                                 'Sample3': ('C', 'G'),
+                                                 'Sample4': ('G', 'G'),
+                                                 'Sample5': ('C', 'C'),
+                                                 'Sample6': ('-', '-'),
+                                                 'Sample7': ('G', 'G'),
+                                                 'Sample8': ('-', '-'),
+                                                 }
+                    }
+    return genotypes
+
+@fixture
+def results() -> Dict[str, Tuple]:
+    results = {'Sample0': ('C', 'T'), # C/T probes het, C/G probe has drop-out
+            'Sample1': ('C', 'T'), # C/T probes het, C/G probe is no call
+            'Sample2': ('-', '-'), # C/T probes hom ref, C/G probe is no call (could be CG)
+            'Sample3': ('C', 'G'), # C/T probes hom ref, C/G probe is het (gen1 C/T probe is a dropout)
+            'Sample4': ('-', '-'), # C/T probes hom ref, C/G probe is GG (gen1 probes conflict)
+            'Sample5': ('-', '-'), # C/T probes conflict
+            'Sample6': ('C', 'T'), # C/T probes are unambiguous without GC probe
+            'Sample7': ('G', 'T'), # C/T both gen 1 probes have drop-outs
+            'Sample8': ('T', 'T'), # don't need the G/C probe because gen2 T hom is unambiguous
+            }
+    return results
+
+@fixture
+def samples() -> Tuple:
+    samples = ("Sample0", "Sample1", "Sample2", "Sample3", "Sample4", "Sample5", "Sample6", "Sample7", "Sample8")
+    return samples
 
 @fixture
 def genome_reader() -> ReferenceGenome:
@@ -27,6 +82,7 @@ def genome_reader() -> ReferenceGenome:
 
 
 class TestVCF:
+
     def test_header_only(self, genome_reader):
         """
         GIVEN a VCF generator
@@ -139,10 +195,10 @@ class TestVCF:
         """
         GIVEN an interable of blocks and indel data
         """
-        indel_records = ManifestFilter(frozenset(), skip_snps=True).filtered_records(
+        bpm_records = ManifestFilter(frozenset(), skip_snps=False).filtered_records(
             CSVManifestReader(manifest_file, genome_reader)
         )
-        vcfgenerator = VCFMaker(genome_reader, indel_records)
+        vcfgenerator = VCFMaker(genome_reader, bpm_records)
         """
         GIVEN a VCF generator
         """
@@ -186,3 +242,112 @@ class TestVCF:
 
         for key in rsidlines:
             assert rsidlines[key]
+
+
+    def test_simplify_block(self, genotypes, results, samples, genome_reader) -> None:
+        """
+        GIVEN an illumina file and reader with the specified genotypes for each probe
+        """
+
+        reader = IlluminaReader("\t")
+        illumina = IlluminaBuilder().samples(samples).genotypes(genotypes).build_file()
+
+        """
+        WHEN it is parsed and blocks are simplifed
+        """
+        manifest_file = open("tests/data/GSA-24v3-0_A2.trim.csv")
+
+        bpm_records = ManifestFilter(frozenset(), skip_snps=False).filtered_records(
+            CSVManifestReader(manifest_file, genome_reader)
+        )
+        vcfgenerator = VCFMaker(genome_reader, bpm_records)
+
+        for _ in vcfgenerator.generate_header("date", "source", "build"):
+            pass
+
+        _, _ = reader.parse_header(illumina)
+        blocks = tuple(reader.generate_line_blocks(illumina))
+
+        """
+        THEN it should have a single genotype per sample which matches the expected result
+        """
+        assert len(blocks) > 0
+
+        for block in blocks:
+            if block[0].chrom == "1" and block[0].pos == 1331911:
+                locus_records =  bpm_records[('chr1', 1331911)]
+                genotypes = vcfgenerator._simplify_block(block, locus_records)
+
+                for sample in samples:
+                    assert genotypes[0][sample] == results[sample]
+
+
+    def test_combine_calls(self, genotypes, results, samples, genome_reader) -> None:
+        """
+        GIVEN an illumina file and reader with the specified genotypes for each probe
+        """
+        reader = IlluminaReader("\t")
+        illumina = IlluminaBuilder().samples(samples).genotypes(genotypes).build_file()
+
+        """
+        WHEN it is parsed and probes are combined
+        """
+        manifest_file = open("tests/data/GSA-24v3-0_A2.trim.csv")
+
+        bpm_records = ManifestFilter(frozenset(), skip_snps=False).filtered_records(
+            CSVManifestReader(manifest_file, genome_reader)
+        )
+        vcfgenerator = VCFMaker(genome_reader, bpm_records)
+
+        for _ in vcfgenerator.generate_header("date", "source", "build"):
+            pass
+
+        _, _ = reader.parse_header(illumina)
+        blocks = tuple(reader.generate_line_blocks(illumina))
+
+        """
+        THEN combined genotypes should have the expected results
+        """
+        assert len(blocks) > 0
+
+        for block in blocks:
+
+            if block[0].chrom == "1" and block[0].pos == 1331911:
+                genotypes = {}
+                alleles = set()
+                probes = {}
+                for record in bpm_records[('chr1', 1331911)]:
+                    match = re.match(r"\[([ATCGID]+)\/([ATCGID]+)\]", record.snp)
+                    if not match:
+                        msg = f"Unexpcted probes {row.chrom}:{row.pos} {probes}"
+                        raise ConverterError(msg)
+
+                    new_alleles = match.group(1, 2)
+
+                    if record.ref_strand == "-":
+                        new_alleles = tuple(STRANDSWAP[allele] for allele in new_alleles)
+                    for allele in new_alleles:
+                        alleles.add(allele)
+                    probes[record.name] = Probe(
+                        name=record.name,
+                        assay_type=record.assay_type,
+                        allele1=new_alleles[0],
+                        allele2=new_alleles[1])
+
+                for row in block:
+                    sampleid = row.sample_id
+                    new_calls = (row.allele1, row.allele2)
+                    probe = probes[row.snp_name]
+
+                    if sampleid in genotypes:
+                        previous_genotypes = genotypes[sampleid]
+                    else:
+                        previous_genotypes = set()
+                    genotypes[sampleid] = vcfgenerator._combine_calls(previous_genotypes, new_calls, alleles, probe)
+
+                for sample in samples:
+                    if len(genotypes[sample]) == 1:
+                        genotype = list(genotypes[sample])[0]
+                    else:
+                        genotype = ('-', '-')
+                    assert genotype == results[sample]

@@ -82,5 +82,5 @@ Total Samples	24"""
             # all lines in a block should have the same chromosome and position
             assert len(set(i.chrom for i in block)) == 1
             assert len(set(i.pos for i in block)) == 1
-            # each line should have a unique sample and snp ids
-            assert len(set((i.sample_id, i.snp_name) for i in block)) == len(block)
+            # each line should have a unique sample and ilmn ids
+            assert len(set((i.sample_id, i.ilmn_id) for i in block)) == len(block)

@@ -7,9 +7,9 @@ from typing import Any, Dict, Generator, Iterable, List, Tuple
 
 from illumina2vcf.bpm.bpmrecord import COMPLEMENT_MAP
 
-
 @dataclass
-class Probe:
+class ProbeInfo:
+    ilmn_id: str
     name: str
     chrom: str
     pos: int
@@ -24,10 +24,12 @@ class IlluminaBuilder:
     _rng: random.Random
     _data_header_full: bool = True
     _samples: Tuple[str, ...]
+    _genotypes: Dict[str, Dict[str, Tuple[str, str]]]
 
     def __init__(self):
         self._rng = random.Random(42)
         self._samples = ("sample1",)
+        self._genotypes = ()
         pass
 
     def sano(self, sano: bool) -> "IlluminaBuilder":
@@ -46,7 +48,11 @@ class IlluminaBuilder:
         self._samples = tuple(samples)
         return self
 
-    def _generate_probes(self) -> Generator[Probe, None, None]:
+    def genotypes(self, genotypes: Iterable[str]) -> "IlluminaBuilder":
+        self._genotypes = genotypes
+        return self
+
+    def _generate_probes(self) -> Generator[ProbeInfo, None, None]:
         with open("tests/data/GSA-24v3-0_A2.trim.csv") as infile:
             # read through the header
             for line in infile:
@@ -55,7 +61,8 @@ class IlluminaBuilder:
             # switch to CSV
             reader = csv.DictReader(infile)
             for row in reader:
-                yield Probe(
+                yield ProbeInfo(
+                    ilmn_id = row["IlmnID"],
                     name=row["Name"],
                     chrom=row["Chr"],
                     pos=int(row["MapInfo"]),
@@ -64,8 +71,8 @@ class IlluminaBuilder:
                     strand=row["RefStrand"],
                 )
 
-    def _generate_sorted_probes(self) -> List[Probe]:
-        def probekey(probe: Probe) -> Tuple[str, int, int]:
+    def _generate_sorted_probes(self) -> List[ProbeInfo]:
+        def probekey(probe: ProbeInfo) -> Tuple[str, int, int]:
             if probe.chrom.isnumeric():
                 return ("", int(probe.chrom), probe.pos)
             else:
@@ -73,10 +80,10 @@ class IlluminaBuilder:
 
         return sorted(self._generate_probes(), key=probekey)
 
-    def _generate_unsorted_probes(self) -> List[Probe]:
+    def _generate_unsorted_probes(self) -> List[ProbeInfo]:
         # convert positions to string before sorting so that they will be out of
         # order (this assumes that there are positions with different numbers of digits)
-        def str_probekey(probe: Probe) -> Tuple[str, int, str]:
+        def str_probekey(probe: ProbeInfo) -> Tuple[str, int, str]:
             if probe.chrom.isnumeric():
                 return ("", int(probe.chrom), str(probe.pos))
             else:
@@ -109,6 +116,7 @@ class IlluminaBuilder:
             return tuple(
                 (
                     "Sample ID",
+                    "IlmnID",
                     "RsID",
                     "GC Score",
                     "SNP Name",
@@ -146,6 +154,7 @@ class IlluminaBuilder:
             return tuple(
                 (
                     "Sample ID",
+                    "IlmnID",
                     "SNP Name",
                     "Sample Name",
                     "Chr",
@@ -157,7 +166,7 @@ class IlluminaBuilder:
                 )
             )
 
-    def _generate_data_lines(self, probes) -> Generator[str, None, None]:
+    def _generate_data_lines(self, probes, genotypes = None) -> Generator[str, None, None]:
         header = self._generate_data_header()
         yield "[Data]"
         yield "\t".join(header)
@@ -167,6 +176,7 @@ class IlluminaBuilder:
                 data = {}
                 data["Sample ID"] = sample
                 data["Sample Index"] = i
+                data["IlmnID"] = probe.ilmn_id
                 data["SNP Name"] = probe.name
                 data["Chr"] = probe.chrom
                 data["Position"] = probe.pos
@@ -175,8 +185,16 @@ class IlluminaBuilder:
                 alleles = (
                     [COMPLEMENT_MAP[probe.a], COMPLEMENT_MAP[probe.b]] if probe.strand == "-" else [probe.a, probe.b]
                 )
-                data["Allele1 - Plus"] = self._rng.choice(alleles)
-                data["Allele2 - Plus"] = self._rng.choice(alleles)
+                if probe.ilmn_id in self._genotypes:
+                    allele1 = self._genotypes[probe.ilmn_id][sample][0]
+                    assert allele1 in alleles or allele1 == '-'
+                    data["Allele1 - Plus"] = allele1
+                    allele2 = self._genotypes[probe.ilmn_id][sample][1]
+                    assert allele2 in alleles or allele2 == '-'
+                    data["Allele2 - Plus"] = allele2
+                else:
+                    data["Allele1 - Plus"] = self._rng.choice(alleles)
+                    data["Allele2 - Plus"] = self._rng.choice(alleles)
                 yield self._map_to_line(header, data)
 
     def _generate_lines(self) -> Generator[str, None, None]:

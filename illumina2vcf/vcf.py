@@ -1,7 +1,8 @@
 import contextlib
 import logging
 import re
-from typing import Dict, Generator, Iterable, List, Literal, Optional, Tuple
+from dataclasses import dataclass
+from typing import Dict, Generator, Iterable, List, Literal, Optional, Set, Tuple
 
 from puretabix.vcf import VCFLine
 
@@ -11,6 +12,9 @@ from illumina2vcf.bpm.referencegenome import ReferenceGenome
 from illumina2vcf.illumina import IlluminaRow
 
 STRANDSWAP = {"A": "T", "T": "A", "C": "G", "G": "C", "I": "I", "D": "D"}
+GEN1 = 0
+GEN2 = 1
+REV_STRAND = 2
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +22,12 @@ logger = logging.getLogger(__name__)
 class ConverterError(Exception):
     pass
 
+@dataclass
+class Probe:
+    name: str
+    assay_type: int
+    allele1: str
+    allele2: str
 
 class QcStats:
     def __init__(self):
@@ -83,10 +93,10 @@ class QcStats:
 
 class VCFMaker:
     _genome_reader: ReferenceGenome
-    _indel_records: Dict
+    _bpm_records: Dict
 
-    def __init__(self, genome_reader: ReferenceGenome, indel_records: Optional[Dict] = None):
-        self._indel_records = {} if indel_records is None else indel_records
+    def __init__(self, genome_reader: ReferenceGenome, bpm_records: Optional[Dict] = None):
+        self._bpm_records = {} if bpm_records is None else bpm_records
         self._genome_reader = genome_reader
         self.qc_stats = QcStats()
 
@@ -175,20 +185,6 @@ class VCFMaker:
                 if row.sample_id not in sample_set:
                     sample_set.append(row.sample_id)
 
-        # if there are multiple probes that agree, thats fine
-        # need to remove conflicting and duplicate rows
-        [calls, probed] = self._simplify_block(block)
-        # if not calls:
-        #    raise ConverterError(
-        #        f"Oversimplified block {block[0].chrom}:{block[0].pos}"
-        #    )
-        # can assume each row in block has:
-        #  same chm, pos
-        #  unique sample names
-        #  had consistent calls
-
-        snp_names = tuple(sorted(frozenset(r.snp_name for r in block)))
-
         chm = block[0].chrom
         # convert pseudoautosomal (XY) to X
         if chm in ("XY", "chrXY"):
@@ -212,6 +208,18 @@ class VCFMaker:
             msg = f"Unable to get reference {chm}:{pos-1}-{pos}"
             raise ConverterError(msg)
 
+        locus_records = ()
+
+        if (chm, pos) in self._bpm_records:
+            # get the records in the manifest for this locaion
+            locus_records = self._bpm_records[(chm, pos)]
+
+        # if there are multiple probes that agree, thats fine
+        # need to remove conflicting and duplicate rows
+        [calls, probed] = self._simplify_block(block, locus_records)
+
+        snp_names = tuple(sorted(frozenset(r.snp_name for r in block)))
+
         converted_calls = {}
         # handel indels
         if "I" in probed or "D" in probed:
@@ -219,13 +227,10 @@ class VCFMaker:
                 msg = f"{';'.join(snp_names)}: contains indels and SNPs ({','.join(probed)}) {block[0].chrom}:{block[0].pos}"
                 raise ConverterError(msg)
 
-            if (chm, pos) in self._indel_records:
-                # get the records in the manifest for this locaion
-                locus_records = self._indel_records[(chm, pos)]
-
+            if locus_records:
                 (ref, alt, pos) = self.get_alleles_for_indel(locus_records[0])
 
-                # check the other lotus records have the same reference + alternative alleles
+                # check the other locus records have the same reference + alternative alleles
                 for alt_record in locus_records[1:]:
                     if (ref, alt, pos) != self.get_alleles_for_indel(alt_record):
                         msg = f"{';'.join(snp_names)}: Mismatched alleles ({','.join(probed)}) {block[0].chrom}:{block[0].pos}"
@@ -235,7 +240,6 @@ class VCFMaker:
 
                 # alt column in VCF is a list
                 alt = (alt,)
-
             else:
                 msg = f"{';'.join(snp_names)}: No BPM record for indel ({','.join(probed)}) {chm}:{pos}"
                 raise ConverterError(msg)
@@ -255,6 +259,7 @@ class VCFMaker:
             # alt may not be used, but is what the microarray could check for
             # alt column in VCF is a list
             alt = tuple(sorted(probed))
+
 
             # convert calls
             for sampleid in calls:
@@ -359,76 +364,126 @@ class VCFMaker:
 
         return self.format_vcf_genotype(vcf_allele1_char, vcf_allele2_char)
 
-    def _simplify_block(self, block: List[IlluminaRow]) -> Tuple[Dict[str, Tuple[str, str]], set]:
-        combined_probes = {}
-        calls = {}
-        conflicts = []
+    def _simplify_block(self, block: List[IlluminaRow], locus_records = None) -> Tuple[Dict[str, Tuple[str, str]], set]:
+        genotypes = {} # all possible genotypes for a sample
+        alleles = set() # all possible alleles at a locus
+        probes = {} # Probe object (assay_type, allele1 value and allele2 value) for each probe in block
+
+        if locus_records:
+            for record in locus_records:
+                match = re.match(r"\[([ATCGID]+)\/([ATCGID]+)\]", record.snp)
+                if not match:
+                    msg = f"Unexpcted probes {record.chromosome}:{record.pos} {record.snp}"
+                    raise ConverterError(msg)
+
+                new_alleles = match.group(1, 2)
+
+                # swap strand if needed
+                if record.ref_strand == REV_STRAND:
+                    new_alleles = tuple(STRANDSWAP[allele] for allele in new_alleles)
+
+                probes[record.name] = Probe(
+                    name=record.name,
+                    assay_type=record.assay_type,
+                    allele1=new_alleles[0],
+                    allele2=new_alleles[1])
+
+                for allele in new_alleles:
+                    alleles.add(allele)
+
+        if not alleles: # allele info not in BPM
+            for row in block:
+                if row.snp_name not in probes:
+                    match = re.match(r"\[([ATCGID]+)\/([ATCGID]+)\]", row.snp)
+                    if not match:
+                        msg = f"Unexpcted probes {row.chrom}:{row.pos} {row.snp}"
+                        raise ConverterError(msg)
+
+                    new_alleles = match.group(1, 2)
+
+                    # swap strand if needed
+                    if row.strand == "-":
+                        new_alleles = tuple(STRANDSWAP[allele] for allele in new_alleles)
+
+                    probes[row.snp_name] = Probe(
+                        name=row.snp_name,
+                        assay_type=None,
+                        allele1=new_alleles[0],
+                        allele2=new_alleles[1]
+                    )
+                    for allele in new_alleles:
+                        alleles.add(allele)
+
         for row in block:
             sampleid = row.sample_id
-            strand = row.strand
-
-            probes = row.snp
-            match = re.match(r"\[([ATCGID]+)\/([ATCGID]+)\]", probes)
-            if not match:
-                msg = f"Unexpcted probes {row.chrom}:{row.pos} {probes}"
-                raise ConverterError(msg)
-
-            new_probes = match.group(1, 2)
-            # exclude indel probes
-            # if new_probes[0] not in "ATCG" or new_probes[1] not in "ATCG":
-            #    raise ConverterError(f"Not a SNV probe {row.chrom}:{row.pos} {probes}")
-
-            # swap strand if needed
-            if strand == "-":
-                new_probes = tuple(STRANDSWAP[probe] for probe in new_probes)
 
             new_calls = (row.allele1, row.allele2)
 
-            if sampleid not in calls:
-                # This sample hasnt been called before
-                calls[sampleid] = new_calls
-                combined_probes[sampleid] = set(new_probes)
+            if sampleid in genotypes:
+                previous_genotypes = genotypes[sampleid]
             else:
-                # This sample has been called before
-                # need to reconcile multiple calls
-                try:
-                    calls[sampleid] = self._combine_calls(
-                        calls[sampleid], new_calls, tuple(combined_probes[sampleid]), new_probes
-                    )
-                except ConverterError:
-                    conflicts.append(sampleid)
-                combined_probes[sampleid].update(new_probes)
+                previous_genotypes = set()
+            genotypes[sampleid] = self._combine_calls(previous_genotypes, new_calls, alleles, probes[row.snp_name])
 
-        probed = set().union(*[combined_probes[sampleid] for sampleid in combined_probes])
+        calls = {}
+        for sampleid in genotypes:
+            if len(genotypes[sampleid]) ==  1:
+                calls[sampleid] = next(iter(genotypes[sampleid]))
+            else:
+                calls[sampleid] = ('-', '-')
 
-        # for all samples with conflicting genotype calls, set the call to no call
-        for sampleid in conflicts:
-            calls[sampleid] = ("-", "-")
-
-        return calls, probed
+        return calls, alleles
 
     def _combine_calls(
         self,
-        previous_calls: Tuple[str, str],
-        new_calls: Tuple[str, str],
-        previous_probes: Tuple[str, ...],
-        new_probes: Tuple[str, ...],
-    ):
-        if previous_calls in (new_calls, new_calls[::-1]):
-            return previous_calls
-        elif new_calls[0] == new_calls[1] and new_calls[0] in previous_calls:
-            if new_probes[0] not in previous_calls or new_probes[1] not in previous_calls:
-                return (
-                    previous_calls
-                )  # conflicting call is a homozygote where only one of the probes matches the true genotype
-            else:
-                raise ConverterError("conflict!")  # both probes match but different call  # noqa: EM101
-        elif previous_calls == ("-", "-"):
-            return new_calls
-        elif previous_calls[0] == previous_calls[1] and previous_calls[0] in new_calls:
-            if new_probes[0] not in previous_probes or new_probes[1] not in previous_probes:
-                return new_calls  # conflicting call is a het where only one of the probes has been tested previously (and previous call is homozygous)
-            else:
-                raise ConverterError("conflict!")  # both probes match but different call  # noqa: EM101
+        previous_genotypes: Set[Tuple[str]],
+        result: Tuple[str, str],
+        alleles: Set[str],
+        probe: Probe,
+    ) -> Set[Tuple[str]]:
+
+        new_genotypes = self._list_genotypes(alleles, result, probe)
+        if previous_genotypes and new_genotypes:
+            genotypes = previous_genotypes.intersection(new_genotypes)
         else:
-            raise ConverterError("conflict!")  # conflicting hets or conflicting homozygotes  # noqa: EM101
+            genotypes = previous_genotypes.union(new_genotypes)
+
+        return genotypes
+
+    def _list_genotypes(self, alleles: Set[str], result: Tuple[str, str], probe: Probe) -> Set[Tuple[str]]:
+        genotypes = set()
+        if result == ('-', '-'):
+            return genotypes
+        for base in result:
+            if base not in alleles:
+                msg = f"base {base} no in allele list ({alleles})"
+                raise ValueError(msg)
+
+        genotypes.add(result)
+        if probe.assay_type is not None and probe.assay_type not in (0,1):
+            msg = "invalid number for assay_type. Must be 0, 1 or none"
+            raise ValueError(msg)
+
+        if probe.assay_type is None or probe.assay_type == GEN2: # Infinium 1
+            # homozygous result can represent het where second allele isn't represented by probes
+            if len(set(result)) == 1:
+                for base in alleles:
+                    if base not in result and base != probe.allele1 and base != probe.allele2:
+                        genotypes.add(tuple(sorted((result[0], base))))
+
+        if probe.assay_type is None or probe.assay_type == GEN1: # Infinium 2
+            # results can represent the called base or it's reverse-complement (if included in alleles)
+            if len(set(result)) == 1: # homozygous
+                complement = STRANDSWAP[result[0]]
+                if complement in alleles: # can be a het or homozygous for the complement
+                    genotypes.add(tuple(sorted((complement, result[0]))))
+                    genotypes.add((complement, complement))
+            else: # heterozygous. consider all pairwise combinations of bases and their complements
+                for base1 in (result[0], STRANDSWAP[result[0]]):
+                    for base2 in (result[1], STRANDSWAP[result[1]]):
+                        if base1 in alleles and base2 in alleles:
+                            genotypes.add(tuple(sorted((base1, base2))))
+
+
+
+        return genotypes
