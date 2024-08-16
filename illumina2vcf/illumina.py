@@ -5,7 +5,6 @@ from typing import FrozenSet, Generator, Iterable, List, Tuple
 
 # header constants
 SAMPLE_ID = "Sample ID"
-ILMNID = "IlmnID"
 SNP_NAME = "SNP Name"
 CHR = "Chr"
 POSITION = "Position"
@@ -22,7 +21,6 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class IlluminaRow:
     sample_id: str
-    ilmn_id: str
     snp_name: str
     chrom: str
     pos: int
@@ -141,9 +139,6 @@ class IlluminaReader:
             if POSITION not in row:
                 msg = f"{POSITION} missing in row {i}"
                 raise DataError(msg)
-            if ILMNID not in row:
-                msg = f"{ILMNID} missing in row {i}"
-                raise DataError(msg)
             if SNP_NAME not in row:
                 msg = f"{SNP_NAME} missing in row {i}"
                 raise DataError(msg)
@@ -153,7 +148,6 @@ class IlluminaReader:
 
             row_mini = IlluminaRow(
                 row[SAMPLE_ID],
-                row[ILMNID],
                 row[SNP_NAME],
                 row[CHR],
                 int(row[POSITION]),

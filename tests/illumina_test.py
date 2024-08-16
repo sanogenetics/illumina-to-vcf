@@ -83,4 +83,4 @@ Total Samples	24"""
             assert len(set(i.chrom for i in block)) == 1
             assert len(set(i.pos for i in block)) == 1
             # each line should have a unique sample and ilmn ids
-            assert len(set((i.sample_id, i.ilmn_id) for i in block)) == len(block)
+            assert len(set((i.sample_id, i.snp_name) for i in block)) == len(block)

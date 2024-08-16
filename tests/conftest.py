@@ -9,7 +9,6 @@ from illumina2vcf.bpm.bpmrecord import COMPLEMENT_MAP
 
 @dataclass
 class ProbeInfo:
-    ilmn_id: str
     name: str
     chrom: str
     pos: int
@@ -62,7 +61,6 @@ class IlluminaBuilder:
             reader = csv.DictReader(infile)
             for row in reader:
                 yield ProbeInfo(
-                    ilmn_id = row["IlmnID"],
                     name=row["Name"],
                     chrom=row["Chr"],
                     pos=int(row["MapInfo"]),
@@ -116,7 +114,6 @@ class IlluminaBuilder:
             return tuple(
                 (
                     "Sample ID",
-                    "IlmnID",
                     "RsID",
                     "GC Score",
                     "SNP Name",
@@ -154,7 +151,6 @@ class IlluminaBuilder:
             return tuple(
                 (
                     "Sample ID",
-                    "IlmnID",
                     "SNP Name",
                     "Sample Name",
                     "Chr",
@@ -176,7 +172,6 @@ class IlluminaBuilder:
                 data = {}
                 data["Sample ID"] = sample
                 data["Sample Index"] = i
-                data["IlmnID"] = probe.ilmn_id
                 data["SNP Name"] = probe.name
                 data["Chr"] = probe.chrom
                 data["Position"] = probe.pos
@@ -185,11 +180,11 @@ class IlluminaBuilder:
                 alleles = (
                     [COMPLEMENT_MAP[probe.a], COMPLEMENT_MAP[probe.b]] if probe.strand == "-" else [probe.a, probe.b]
                 )
-                if probe.ilmn_id in self._genotypes:
-                    allele1 = self._genotypes[probe.ilmn_id][sample][0]
+                if probe.name in self._genotypes:
+                    allele1 = self._genotypes[probe.name][sample][0]
                     assert allele1 in alleles or allele1 == '-'
                     data["Allele1 - Plus"] = allele1
-                    allele2 = self._genotypes[probe.ilmn_id][sample][1]
+                    allele2 = self._genotypes[probe.name][sample][1]
                     assert allele2 in alleles or allele2 == '-'
                     data["Allele2 - Plus"] = allele2
                 else:
