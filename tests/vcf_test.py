@@ -22,37 +22,41 @@ def blocks() -> Tuple[List[Dict[str, str]], ...]:
 
 @fixture
 def genotypes() -> Dict[str, Dict[str, Tuple]]:
-    genotypes = {'rs76584377-138_Inf2_C_T': {'Sample0': ('C', 'T'),
-                                                 'Sample1': ('C', 'T'),
-                                                 'Sample2': ('C', 'C'),
-                                                 'Sample3': ('C', 'C'),
-                                                 'Sample4': ('C', 'C'),
-                                                 'Sample5': ('C', 'C'),
-                                                 'Sample6': ('C', 'T'),
-                                                 'Sample7': ('C', 'T'),
-                                                 'Sample8': ('T', 'T'),
-                                                },
-                     'rs76584377-138_Inf1_C_T': {'Sample0': ('C', 'T'),
-                                                 'Sample1': ('C', 'T'),
-                                                 'Sample2': ('C', 'C'),
-                                                 'Sample3': ('C', 'C'),
-                                                 'Sample4': ('C', 'C'),
-                                                 'Sample5': ('C', 'T'),
-                                                 'Sample6': ('C', 'T'),
-                                                 'Sample7': ('T', 'T'),
-                                                 'Sample8': ('T', 'T'),
-                                                 },
-                     'rs76584377-138_Inf1_C_G': {'Sample0': ('C', 'C'),
-                                                 'Sample1': ('-', '-'),
-                                                 'Sample2': ('-', '-'),
-                                                 'Sample3': ('C', 'G'),
-                                                 'Sample4': ('G', 'G'),
-                                                 'Sample5': ('C', 'C'),
-                                                 'Sample6': ('-', '-'),
-                                                 'Sample7': ('G', 'G'),
-                                                 'Sample8': ('-', '-'),
-                                                 }
-                    }
+    genotypes = {
+        'rs76584377': { # rs76584377-138_Inf2_C_T
+            'Sample0': ('C', 'T'),
+            'Sample1': ('C', 'T'),
+            'Sample2': ('C', 'C'),
+            'Sample3': ('C', 'C'),
+            'Sample4': ('C', 'C'),
+            'Sample5': ('C', 'C'),
+            'Sample6': ('C', 'T'),
+            'Sample7': ('C', 'T'),
+            'Sample8': ('T', 'T'),
+        },
+        'rs76584377.1': { # rs76584377-138_Inf1_C_T
+            'Sample0': ('C', 'T'),
+            'Sample1': ('C', 'T'),
+            'Sample2': ('C', 'C'),
+            'Sample3': ('C', 'C'),
+            'Sample4': ('C', 'C'),
+            'Sample5': ('C', 'T'),
+            'Sample6': ('C', 'T'),
+            'Sample7': ('T', 'T'),
+            'Sample8': ('T', 'T'),
+        },
+        'rs76584377.2': { # rs76584377-138_Inf1_C_G'
+            'Sample0': ('C', 'C'),
+            'Sample1': ('-', '-'),
+            'Sample2': ('-', '-'),
+            'Sample3': ('C', 'G'),
+            'Sample4': ('G', 'G'),
+            'Sample5': ('C', 'C'),
+            'Sample6': ('-', '-'),
+            'Sample7': ('G', 'G'),
+            'Sample8': ('-', '-'),
+        }
+    }
     return genotypes
 
 @fixture
