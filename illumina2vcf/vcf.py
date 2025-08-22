@@ -12,8 +12,8 @@ from illumina2vcf.bpm.referencegenome import ReferenceGenome
 from illumina2vcf.illumina import IlluminaRow
 
 STRANDSWAP = {"A": "T", "T": "A", "C": "G", "G": "C", "I": "I", "D": "D"}
-GEN1 = 0
-GEN2 = 1
+GEN1 = 1
+GEN2 = 0
 REV_STRAND = 2
 
 logger = logging.getLogger(__name__)
@@ -459,19 +459,22 @@ class VCFMaker:
                 msg = f"base {base} no in allele list ({alleles})"
                 raise ValueError(msg)
 
-        genotypes.add(result)
+        genotypes.add(tuple(sorted(result)))
         if probe.assay_type is not None and probe.assay_type not in (0,1):
             msg = "invalid number for assay_type. Must be 0, 1 or none"
             raise ValueError(msg)
 
-        if probe.assay_type is None or probe.assay_type == GEN2: # Infinium 1
+        if probe.assay_type is None or probe.assay_type == GEN1: # Infinium 1
             # homozygous result can represent het where second allele isn't represented by probes
+            # eg; if alleles = (T,C,G), a TT result for a TG probe can represent TT or TC
+            # loop over all alleles, and combine them with homozygous base to create a list of possible genotypes
+            # bases = T, C and G. T is in result, G matches one of the probe alleles. The only genotype added is T,C
             if len(set(result)) == 1:
                 for base in alleles:
                     if base not in result and base != probe.allele1 and base != probe.allele2:
                         genotypes.add(tuple(sorted((result[0], base))))
 
-        if probe.assay_type is None or probe.assay_type == GEN1: # Infinium 2
+        if probe.assay_type is None or probe.assay_type == GEN2: # Infinium 2
             # results can represent the called base or it's reverse-complement (if included in alleles)
             if len(set(result)) == 1: # homozygous
                 complement = STRANDSWAP[result[0]]
