@@ -63,22 +63,22 @@ def genotypes() -> Dict[str, Dict[str, Tuple]]:
             'Sample0': ('T', 'T'), # TT
             'Sample1': ('T', 'C'), # TC
             'Sample2': ('T', 'T'), # TG
-            'Sample3': ('T', 'C'), # CG
+            'Sample3': ('C', 'C'), # CG
             'Sample4': ('C', 'C'), # CC
-            'Sample5': ('C', 'C'), # CC
-            'Sample6': ('T', 'C'), # -- (TC or CG)
-            'Sample7': ('C', 'C'), # -- (conflict)
+            'Sample5': ('C', 'C'), # -- (CC or CG)
+            'Sample6': ('T', 'C'), # TC
+            'Sample7': ('T', 'C'), # -- (conflict)
             'Sample8': ('-', '-'), # -- (no call)
         },
         'rs76763715.2': { # ilmnseq_rs76763715.2_F2BT-147_B_F_259579156 (T/G, gen1)
             'Sample0': ('T', 'T'), # TT
             'Sample1': ('T', 'T'), # TC
             'Sample2': ('T', 'G'), # TG
-            'Sample3': ('T', 'G'), # CG
-            'Sample4': ('T', 'T'), # CC
-            'Sample5': ('-', '-'), # CC
-            'Sample6': ('-', '-'), # -- (TC or CG)
-            'Sample7': ('G', 'G'), # -- (conflict)
+            'Sample3': ('G', 'G'), # CG
+            'Sample4': ('-', '-'), # --
+            'Sample5': ('-', '-'), # -- (CC or CG)
+            'Sample6': ('-', '-'), # TC
+            'Sample7': ('T', 'G'), # -- (conflict)
             'Sample8': ('-', '-'), # -- (no call)
         },
     }
@@ -90,9 +90,9 @@ def results() -> Dict[str, List[Tuple]]:
             'Sample1': [('C', 'T'), ('C', 'T')], # C/T probes het, C/G probe is no call
             'Sample2': [('-', '-'), ('G', 'T')], # C/T probes hom ref, C/G probe is no call (could be CG)
             'Sample3': [('C', 'G'), ('C', 'G')], # C/T probes hom ref, C/G probe is het (gen1 C/T probe is a dropout)
-            'Sample4': [('-', '-'), ('G', 'T')], # C/T probes hom ref, C/G probe is GG (gen1 probes conflict)
-            'Sample5': [('-', '-'), ('G', 'T')], # C/T probes conflict
-            'Sample6': [('C', 'T'), ('-', '-')], # C/T probes are unambiguous without GC probe
+            'Sample4': [('-', '-'), ('-', '-')], # C/T probes hom ref, C/G probe is GG (gen1 probes conflict)
+            'Sample5': [('-', '-'), ('-', '-')], # C/T probes conflict
+            'Sample6': [('C', 'T'), ('C', 'T')], # C/T probes are unambiguous without GC probe
             'Sample7': [('G', 'T'), ('-', '-')], # C/T both gen 1 probes have drop-outs
             'Sample8': [('T', 'T'), ('-', '-')], # don't need the G/C probe because gen2 T hom is unambiguous
             }
@@ -364,6 +364,8 @@ class TestVCF:
                         new_alleles = tuple(STRANDSWAP[allele] for allele in new_alleles)
                     for allele in new_alleles:
                         alleles.add(allele)
+                    logger.warning(f'alleles: {alleles}')
+                    logger.warning(f'generation: {record.assay_type}')
                     probes[record.name] = Probe(
                         name=record.name,
                         assay_type=record.assay_type,
@@ -379,7 +381,12 @@ class TestVCF:
                         previous_genotypes = genotypes[sampleid]
                     else:
                         previous_genotypes = set()
+                    logger.warning(sampleid)
+                    logger.warning(f'previous genotypes: {previous_genotypes}')
+                    logger.warning(f'new calls: {new_calls}')
+                    logger.warning(f'probe" {probe}')
                     genotypes[sampleid] = vcfgenerator._combine_calls(previous_genotypes, new_calls, alleles, probe)
+                    logger.warning(f'combined genotype: {genotypes[sampleid]}')
 
                 for sample in samples:
                     if len(genotypes[sample]) == 1:
