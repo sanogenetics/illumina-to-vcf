@@ -1,4 +1,5 @@
 import itertools
+import logging
 import re
 import gzip
 from typing import Dict, List, Tuple
@@ -11,6 +12,8 @@ from illumina2vcf.bpm.bpmreader import CSVManifestReader, ManifestFilter
 from illumina2vcf.bpm.referencegenome import ReferenceGenome
 
 from .conftest import IlluminaBuilder
+
+logger = logging.getLogger(__name__)
 
 @fixture
 def blocks() -> Tuple[List[Dict[str, str]], ...]:
@@ -55,21 +58,43 @@ def genotypes() -> Dict[str, Dict[str, Tuple]]:
             'Sample6': ('-', '-'),
             'Sample7': ('G', 'G'),
             'Sample8': ('-', '-'),
-        }
+        },
+        'rs76763715.1': { # ilmnseq_rs76763715.1_F2BT-147_B_F_2595791558 (T/C, gen1)
+            'Sample0': ('T', 'T'), # TT
+            'Sample1': ('T', 'C'), # TC
+            'Sample2': ('T', 'T'), # TG
+            'Sample3': ('T', 'C'), # CG
+            'Sample4': ('C', 'C'), # CC
+            'Sample5': ('C', 'C'), # CC
+            'Sample6': ('T', 'C'), # -- (TC or CG)
+            'Sample7': ('C', 'C'), # -- (conflict)
+            'Sample8': ('-', '-'), # -- (no call)
+        },
+        'rs76763715.2': { # ilmnseq_rs76763715.2_F2BT-147_B_F_259579156 (T/G, gen1)
+            'Sample0': ('T', 'T'), # TT
+            'Sample1': ('T', 'T'), # TC
+            'Sample2': ('T', 'G'), # TG
+            'Sample3': ('T', 'G'), # CG
+            'Sample4': ('T', 'T'), # CC
+            'Sample5': ('-', '-'), # CC
+            'Sample6': ('-', '-'), # -- (TC or CG)
+            'Sample7': ('G', 'G'), # -- (conflict)
+            'Sample8': ('-', '-'), # -- (no call)
+        },
     }
     return genotypes
 
 @fixture
-def results() -> Dict[str, Tuple]:
-    results = {'Sample0': ('C', 'T'), # C/T probes het, C/G probe has drop-out
-            'Sample1': ('C', 'T'), # C/T probes het, C/G probe is no call
-            'Sample2': ('-', '-'), # C/T probes hom ref, C/G probe is no call (could be CG)
-            'Sample3': ('C', 'G'), # C/T probes hom ref, C/G probe is het (gen1 C/T probe is a dropout)
-            'Sample4': ('-', '-'), # C/T probes hom ref, C/G probe is GG (gen1 probes conflict)
-            'Sample5': ('-', '-'), # C/T probes conflict
-            'Sample6': ('C', 'T'), # C/T probes are unambiguous without GC probe
-            'Sample7': ('G', 'T'), # C/T both gen 1 probes have drop-outs
-            'Sample8': ('T', 'T'), # don't need the G/C probe because gen2 T hom is unambiguous
+def results() -> Dict[str, List[Tuple]]:
+    results = {'Sample0': [('C', 'T'), ('T', 'T')], # C/T probes het, C/G probe has drop-out
+            'Sample1': [('C', 'T'), ('C', 'T')], # C/T probes het, C/G probe is no call
+            'Sample2': [('-', '-'), ('G', 'T')], # C/T probes hom ref, C/G probe is no call (could be CG)
+            'Sample3': [('C', 'G'), ('C', 'G')], # C/T probes hom ref, C/G probe is het (gen1 C/T probe is a dropout)
+            'Sample4': [('-', '-'), ('G', 'T')], # C/T probes hom ref, C/G probe is GG (gen1 probes conflict)
+            'Sample5': [('-', '-'), ('G', 'T')], # C/T probes conflict
+            'Sample6': [('C', 'T'), ('-', '-')], # C/T probes are unambiguous without GC probe
+            'Sample7': [('G', 'T'), ('-', '-')], # C/T both gen 1 probes have drop-outs
+            'Sample8': [('T', 'T'), ('-', '-')], # don't need the G/C probe because gen2 T hom is unambiguous
             }
     return results
 
@@ -283,7 +308,13 @@ class TestVCF:
                 genotypes = vcfgenerator._simplify_block(block, locus_records)
 
                 for sample in samples:
-                    assert genotypes[0][sample] == results[sample]
+                    assert (sample, genotypes[0][sample]) == (sample, results[sample][0])
+            elif block[0].chrom == "1" and block[0].pos == 155235843:
+                locus_records =  bpm_records[('chr1', 155235843)]
+                genotypes = vcfgenerator._simplify_block(block, locus_records)
+
+                for sample in samples:
+                    assert (sample, genotypes[0][sample]) == (sample, results[sample][1])
 
 
     def test_combine_calls(self, genotypes, results, samples, genome_reader) -> None:
@@ -308,6 +339,7 @@ class TestVCF:
 
         _, _ = reader.parse_header(illumina)
         blocks = tuple(reader.generate_line_blocks(illumina))
+        logger.warning(f"Number of blocks: {len(blocks)}")
 
         """
         THEN combined genotypes should have the expected results
@@ -354,4 +386,4 @@ class TestVCF:
                         genotype = list(genotypes[sample])[0]
                     else:
                         genotype = ('-', '-')
-                    assert genotype == results[sample]
+                    assert (sample, genotype) == (sample, results[sample][0])
