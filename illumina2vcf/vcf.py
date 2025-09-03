@@ -17,8 +17,10 @@ GEN2 = 0
 REV_STRAND = 2
 
 logger = logging.getLogger(__name__)
-_CHR_RE = re.compile(r'^(?:chr)?(?:[1-9][0-9]?|X|Y|M)$') #Matches chromosome names with or without the "chr" prefix, including numbers (1-99), "X", "Y", or "M"
 
+# tolerant regex for contigs and probe-name aliasing ---
+_CHR_RE = re.compile(r'^(?:chr)?(?:[1-9][0-9]?|X|Y|M)$') #Matches chromosome names with or without the "chr" prefix, including numbers (1-99), "X", "Y", or "M"
+_BASE_PROBE_RE = re.compile(r'-\d+_[A-Z]+_[A-Z]+(?:_\d+)?$') # Matches probe names with a specific structure: a hyphen, digits, two uppercase letters separated by underscores, and an optional numeric suffix.
 
 
 class ConverterError(Exception):
@@ -405,11 +407,18 @@ class VCFMaker:
                 if record.ref_strand == REV_STRAND:
                     new_alleles = tuple(STRANDSWAP[allele] for allele in new_alleles)
 
-                probes[record.name] = Probe(
+                probe_obj = Probe(
                     name=record.name,
                     assay_type=record.assay_type,
                     allele1=new_alleles[0],
-                    allele2=new_alleles[1])
+                    allele2=new_alleles[1],
+                )
+                probes[record.name] = probe_obj
+
+                # alias long Illumina name to its base (short) form ---
+                short = _BASE_PROBE_RE.sub("", record.name)
+                if short not in probes:
+                    probes[short] = probe_obj
 
                 for allele in new_alleles:
                     alleles.add(allele)
@@ -432,28 +441,36 @@ class VCFMaker:
                         name=row.snp_name,
                         assay_type=None,
                         allele1=new_alleles[0],
-                        allele2=new_alleles[1]
+                        allele2=new_alleles[1],
                     )
                     for allele in new_alleles:
                         alleles.add(allele)
 
         for row in block:
             sampleid = row.sample_id
-
             new_calls = (row.allele1, row.allele2)
 
-            if sampleid in genotypes:
-                previous_genotypes = genotypes[sampleid]
-            else:
-                previous_genotypes = set()
-            genotypes[sampleid] = self._combine_calls(previous_genotypes, new_calls, alleles, probes[row.snp_name])
+            previous_genotypes = genotypes[sampleid] if sampleid in genotypes else set()
+
+            # robust probe lookup (short vs long names) ---
+            probe = probes.get(row.snp_name)
+            if probe is None:
+                # last-resort: match short name against long-name keys
+                for k in probes.keys():
+                    if k.startswith(row.snp_name + "-"):
+                        probe = probes[k]
+                        break
+            if probe is None:
+                raise ConverterError(f"Probe name mismatch: no probe for {row.snp_name}")
+
+            genotypes[sampleid] = self._combine_calls(previous_genotypes, new_calls, alleles, probe)
 
         calls = {}
         for sampleid in genotypes:
-            if len(genotypes[sampleid]) ==  1:
+            if len(genotypes[sampleid]) == 1:
                 calls[sampleid] = next(iter(genotypes[sampleid]))
             else:
-                calls[sampleid] = ('-', '-')
+                calls[sampleid] = ("-", "-")
 
         return calls, alleles
 
@@ -475,7 +492,7 @@ class VCFMaker:
 
     def _list_genotypes(self, alleles: Set[str], result: Tuple[str, str], probe: Probe) -> Set[Tuple[str]]:
         genotypes = set()
-        if result == ('-', '-'):
+        if result == ("-", "-"):
             return genotypes
         for base in result:
             if base not in alleles:
@@ -483,11 +500,11 @@ class VCFMaker:
                 raise ValueError(msg)
 
         genotypes.add(tuple(sorted(result)))
-        if probe.assay_type is not None and probe.assay_type not in (0,1):
+        if probe.assay_type is not None and probe.assay_type not in (0, 1):
             msg = "invalid number for assay_type. Must be 0, 1 or none"
             raise ValueError(msg)
 
-        if probe.assay_type is None or probe.assay_type == GEN1: # Infinium 1
+        if probe.assay_type is None or probe.assay_type == GEN1:  # Infinium 1
             # homozygous result can represent het where second allele isn't represented by probes
             # eg; if alleles = (T,C,G), a TT result for a TG probe can represent TT or TC
             # loop over all alleles, and combine them with homozygous base to create a list of possible genotypes
@@ -497,14 +514,14 @@ class VCFMaker:
                     if base not in result and base != probe.allele1 and base != probe.allele2:
                         genotypes.add(tuple(sorted((result[0], base))))
 
-        if probe.assay_type is None or probe.assay_type == GEN2: # Infinium 2
+        if probe.assay_type is None or probe.assay_type == GEN2:  # Infinium 2
             # results can represent the called base or it's reverse-complement (if included in alleles)
-            if len(set(result)) == 1: # homozygous
+            if len(set(result)) == 1:  # homozygous
                 complement = STRANDSWAP[result[0]]
-                if complement in alleles: # can be a het or homozygous for the complement
+                if complement in alleles:  # can be a het or homozygous for the complement
                     genotypes.add(tuple(sorted((complement, result[0]))))
                     genotypes.add((complement, complement))
-            else: # heterozygous. consider all pairwise combinations of bases and their complements
+            else:  # heterozygous. consider all pairwise combinations of bases and their complements
                 for base1 in (result[0], STRANDSWAP[result[0]]):
                     for base2 in (result[1], STRANDSWAP[result[1]]):
                         if base1 in alleles and base2 in alleles:
