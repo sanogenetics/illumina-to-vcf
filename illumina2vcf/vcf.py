@@ -18,9 +18,8 @@ REV_STRAND = 2
 
 logger = logging.getLogger(__name__)
 
-# tolerant regex for contigs and probe-name aliasing ---
+# tolerant regex for contigs ---
 _CHR_RE = re.compile(r'^(?:chr)?(?:[1-9][0-9]?|X|Y|M)$') #Matches chromosome names with or without the "chr" prefix, including numbers (1-99), "X", "Y", or "M"
-_BASE_PROBE_RE = re.compile(r'-\d+_[A-Z]+_[A-Z]+(?:_\d+)?$') # Matches probe names with a specific structure: a hyphen, digits, two uppercase letters separated by underscores, and an optional numeric suffix.
 
 
 class ConverterError(Exception):
@@ -421,11 +420,6 @@ class VCFMaker:
                 )
                 probes[record.name] = probe_obj
 
-                # alias long Illumina name to its base (short) form ---
-                short = _BASE_PROBE_RE.sub("", record.name)
-                if short not in probes:
-                    probes[short] = probe_obj
-
                 for allele in new_alleles:
                     alleles.add(allele)
 
@@ -458,7 +452,7 @@ class VCFMaker:
 
             previous_genotypes = genotypes[sampleid] if sampleid in genotypes else set()
 
-            # robust probe lookup (short vs long names) ---
+            # probe lookup with fallback ---
             probe = probes.get(row.snp_name)
             if probe is None:
                 # warn and fall back to row-derived probe definition
