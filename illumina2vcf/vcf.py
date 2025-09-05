@@ -254,12 +254,18 @@ class VCFMaker:
                 raise ConverterError(msg)
 
             if locus_records:
-                (ref, alt, pos) = self.get_alleles_for_indel(locus_records[0])
+                # Use only indel records for deriving REF/ALT; some manifests carry SNPs at the same locus
+                indel_records = [r for r in locus_records if getattr(r, "indel_source_sequence", None)]
+                if not indel_records:
+                    msg = f"{';'.join(snp_names)}: No indel BPM record at locus with indel calls ({chm}:{pos})"
+                    raise ConverterError(msg)
 
-                # check the other locus records have the same reference + alternative alleles
-                for alt_record in locus_records[1:]:
+                (ref, alt, pos) = self.get_alleles_for_indel(indel_records[0])
+
+                # check the other indel records have the same reference + alternative alleles
+                for alt_record in indel_records[1:]:
                     if (ref, alt, pos) != self.get_alleles_for_indel(alt_record):
-                        msg = f"{';'.join(snp_names)}: Mismatched alleles ({','.join(probed)}) {block[0].chrom}:{block[0].pos}"
+                        msg = f"{';'.join(snp_names)}: Mismatched indel alleles ({','.join(probed)}) {block[0].chrom}:{block[0].pos}"
                         raise ConverterError(msg)
                 # Illumina position is the position of the insertion (ie; one base after the ref allele)
                 # We want the position of the start of the ref allele, so we need to reduce pos by 1
@@ -272,7 +278,7 @@ class VCFMaker:
 
             for sampleid in calls:
                 converted_calls[sampleid] = self.convert_indel_genotype_to_vcf(
-                    calls[sampleid], locus_records[0].is_deletion
+                    calls[sampleid], indel_records[0].is_deletion
                 )
         else:
             # SNPs
