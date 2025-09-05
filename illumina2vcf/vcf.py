@@ -18,6 +18,9 @@ REV_STRAND = 2
 
 logger = logging.getLogger(__name__)
 
+# tolerant regex for contigs ---
+_CHR_RE = re.compile(r'^(?:chr)?(?:[1-9][0-9]?|X|Y|M)$') #Matches chromosome names with or without the "chr" prefix, including numbers (1-99), "X", "Y", or "M"
+
 
 class ConverterError(Exception):
     pass
@@ -72,14 +75,16 @@ class QcStats:
     def _update_qc_stats(self, vcfline: VCFLine) -> None:
         gt = vcfline.sample[0]["GT"]
         chm = vcfline.chrom
-        if chm == "chrM":
-            pass
-        elif chm == "chrX":
+        # --- CHANGED: normalise chr prefix for QC counting ---
+        base = chm[3:] if chm.startswith("chr") else chm
+        if base in ("M", "MT"):
+            return
+        elif base == "X":
             if gt != "./.":
                 self.called_lines_x += 1
                 if len(set(gt.split("/"))) == 2:  # noqa: PLR2004
                     self.heterozygous_lines_x += 1
-        elif chm == "chrY":
+        elif base == "Y":
             self.vcf_lines_y += 1
             if gt != "./.":
                 self.called_lines_y += 1
@@ -102,7 +107,26 @@ class VCFMaker:
 
     @staticmethod
     def is_valid_chromosome(chrom: str) -> bool:
-        return bool(re.match(r"^chr[1-9XYM][0-9]?$", chrom))
+        # accept both chr* and non-chr ---
+        return bool(_CHR_RE.match(chrom))
+
+    # map requested chrom to the names that exist in the FASTA index ---
+    def _normalise_chrom(self, chm: str) -> str:
+        faidx = self._genome_reader.reference_fasta.faidx.index
+        if chm in faidx:
+            return chm
+        alt = chm[3:] if chm.startswith("chr") else f"chr{chm}"
+        if alt in faidx:
+            return alt
+        if chm in ("MT", "chrMT"):
+            for cand in ("MT", "chrMT", "M", "chrM"):
+                if cand in faidx:
+                    return cand
+        if chm in ("M", "chrM"):
+            for cand in ("M", "chrM", "MT", "chrMT"):
+                if cand in faidx:
+                    return cand
+        raise ConverterError(f"Unexpected chromosome {chm}")
 
     def generate_header(self, date: str, source: str, buildname: str) -> Generator[VCFLine, None, None]:
         # write header
@@ -124,13 +148,15 @@ class VCFMaker:
             },
         )
 
-        # ##contig=<ID=1,length=249250621,assembly=GRCh37>
+        # ##contig lines from FASTA index (accept both naming styles)
+        # eg ##contig=<ID=1,length=249250621,assembly=GRCh37>
         for chrom, rec in self._genome_reader.reference_fasta.faidx.index.items():
             if self.is_valid_chromosome(chrom):
                 yield VCFLine.as_comment_key_dict(
                     "contig",
                     {"ID": chrom, "length": rec.rlen, "assembly": buildname},
                 )
+
         # ##qc_stats=<callrate=0.99,het=0.33,x_het=0.21,y_notnull=0.24>
         if qc_stats := self.qc_stats.vcf_comment():
             yield qc_stats
@@ -188,13 +214,12 @@ class VCFMaker:
         chm = block[0].chrom
         # convert pseudoautosomal (XY) to X
         if chm in ("XY", "chrXY"):
-            chm = "chrX"
-        # convert MT to M
+            chm = "X"
+        # convert MT to M-equivalent and normalise later
         if chm in ("MT", "chrMT"):
-            chm = "chrM"
-        # force chr prefix
-        if not chm.startswith("chr"):
-            chm = f"chr{chm}"
+            chm = "M"
+        # not forcing 'chr'; normalising to FASTA naming instead ---
+        chm = self._normalise_chrom(chm)
         if chm not in self._genome_reader.reference_fasta.faidx.index:
             msg = f"Unexpected chromosome {chm}:{block[0].pos}"
             raise ConverterError(msg)
@@ -228,12 +253,18 @@ class VCFMaker:
                 raise ConverterError(msg)
 
             if locus_records:
-                (ref, alt, pos) = self.get_alleles_for_indel(locus_records[0])
+                # Use only indel records for deriving REF/ALT; some manifests carry SNPs at the same locus
+                indel_records = [r for r in locus_records if getattr(r, "indel_source_sequence", None)]
+                if not indel_records:
+                    msg = f"{';'.join(snp_names)}: No indel BPM record at locus with indel calls ({chm}:{pos})"
+                    raise ConverterError(msg)
 
-                # check the other locus records have the same reference + alternative alleles
-                for alt_record in locus_records[1:]:
+                (ref, alt, pos) = self.get_alleles_for_indel(indel_records[0])
+
+                # check the other indel records have the same reference + alternative alleles
+                for alt_record in indel_records[1:]:
                     if (ref, alt, pos) != self.get_alleles_for_indel(alt_record):
-                        msg = f"{';'.join(snp_names)}: Mismatched alleles ({','.join(probed)}) {block[0].chrom}:{block[0].pos}"
+                        msg = f"{';'.join(snp_names)}: Mismatched indel alleles ({','.join(probed)}) {block[0].chrom}:{block[0].pos}"
                         raise ConverterError(msg)
                 # Illumina position is the position of the insertion (ie; one base after the ref allele)
                 # We want the position of the start of the ref allele, so we need to reduce pos by 1
@@ -246,7 +277,7 @@ class VCFMaker:
 
             for sampleid in calls:
                 converted_calls[sampleid] = self.convert_indel_genotype_to_vcf(
-                    calls[sampleid], locus_records[0].is_deletion
+                    calls[sampleid], indel_records[0].is_deletion
                 )
         else:
             # SNPs
@@ -259,7 +290,6 @@ class VCFMaker:
             # alt may not be used, but is what the microarray could check for
             # alt column in VCF is a list
             alt = tuple(sorted(probed))
-
 
             # convert calls
             for sampleid in calls:
@@ -382,11 +412,13 @@ class VCFMaker:
                 if record.ref_strand == REV_STRAND:
                     new_alleles = tuple(STRANDSWAP[allele] for allele in new_alleles)
 
-                probes[record.name] = Probe(
+                probe_obj = Probe(
                     name=record.name,
                     assay_type=record.assay_type,
                     allele1=new_alleles[0],
-                    allele2=new_alleles[1])
+                    allele2=new_alleles[1],
+                )
+                probes[record.name] = probe_obj
 
                 for allele in new_alleles:
                     alleles.add(allele)
@@ -409,28 +441,54 @@ class VCFMaker:
                         name=row.snp_name,
                         assay_type=None,
                         allele1=new_alleles[0],
-                        allele2=new_alleles[1]
+                        allele2=new_alleles[1],
                     )
                     for allele in new_alleles:
                         alleles.add(allele)
 
         for row in block:
             sampleid = row.sample_id
-
             new_calls = (row.allele1, row.allele2)
 
-            if sampleid in genotypes:
-                previous_genotypes = genotypes[sampleid]
-            else:
-                previous_genotypes = set()
-            genotypes[sampleid] = self._combine_calls(previous_genotypes, new_calls, alleles, probes[row.snp_name])
+            previous_genotypes = genotypes[sampleid] if sampleid in genotypes else set()
+
+            # probe lookup with fallback ---
+            probe = probes.get(row.snp_name)
+            if probe is None:
+                # warn and fall back to row-derived probe definition
+                match = re.match(r"\[([ATCGID]+)\/([ATCGID]+)\]", row.snp)
+                if not match:
+                    msg = f"Unexpcted probes {row.chrom}:{row.pos} {row.snp}"
+                    raise ConverterError(msg)
+                new_alleles = match.group(1, 2)
+                if row.strand == "-":
+                    new_alleles = tuple(STRANDSWAP[allele] for allele in new_alleles)
+                logger.warning(
+                    "Probe name %s not found in manifest at %s:%s; falling back to row-derived alleles %s/%s",
+                    row.snp_name,
+                    row.chrom,
+                    row.pos,
+                    new_alleles[0],
+                    new_alleles[1],
+                )
+                probe = Probe(
+                    name=row.snp_name,
+                    assay_type=None,
+                    allele1=new_alleles[0],
+                    allele2=new_alleles[1],
+                )
+                probes[row.snp_name] = probe
+                for allele in new_alleles:
+                    alleles.add(allele)
+
+            genotypes[sampleid] = self._combine_calls(previous_genotypes, new_calls, alleles, probe)
 
         calls = {}
         for sampleid in genotypes:
-            if len(genotypes[sampleid]) ==  1:
+            if len(genotypes[sampleid]) == 1:
                 calls[sampleid] = next(iter(genotypes[sampleid]))
             else:
-                calls[sampleid] = ('-', '-')
+                calls[sampleid] = ("-", "-")
 
         return calls, alleles
 
@@ -452,7 +510,7 @@ class VCFMaker:
 
     def _list_genotypes(self, alleles: Set[str], result: Tuple[str, str], probe: Probe) -> Set[Tuple[str]]:
         genotypes = set()
-        if result == ('-', '-'):
+        if result == ("-", "-"):
             return genotypes
         for base in result:
             if base not in alleles:
@@ -460,11 +518,11 @@ class VCFMaker:
                 raise ValueError(msg)
 
         genotypes.add(tuple(sorted(result)))
-        if probe.assay_type is not None and probe.assay_type not in (0,1):
+        if probe.assay_type is not None and probe.assay_type not in (0, 1):
             msg = "invalid number for assay_type. Must be 0, 1 or none"
             raise ValueError(msg)
 
-        if probe.assay_type is None or probe.assay_type == GEN1: # Infinium 1
+        if probe.assay_type is None or probe.assay_type == GEN1:  # Infinium 1
             # homozygous result can represent het where second allele isn't represented by probes
             # eg; if alleles = (T,C,G), a TT result for a TG probe can represent TT or TC
             # loop over all alleles, and combine them with homozygous base to create a list of possible genotypes
@@ -474,19 +532,17 @@ class VCFMaker:
                     if base not in result and base != probe.allele1 and base != probe.allele2:
                         genotypes.add(tuple(sorted((result[0], base))))
 
-        if probe.assay_type is None or probe.assay_type == GEN2: # Infinium 2
+        if probe.assay_type is None or probe.assay_type == GEN2:  # Infinium 2
             # results can represent the called base or it's reverse-complement (if included in alleles)
-            if len(set(result)) == 1: # homozygous
+            if len(set(result)) == 1:  # homozygous
                 complement = STRANDSWAP[result[0]]
-                if complement in alleles: # can be a het or homozygous for the complement
+                if complement in alleles:  # can be a het or homozygous for the complement
                     genotypes.add(tuple(sorted((complement, result[0]))))
                     genotypes.add((complement, complement))
-            else: # heterozygous. consider all pairwise combinations of bases and their complements
+            else:  # heterozygous. consider all pairwise combinations of bases and their complements
                 for base1 in (result[0], STRANDSWAP[result[0]]):
                     for base2 in (result[1], STRANDSWAP[result[1]]):
                         if base1 in alleles and base2 in alleles:
                             genotypes.add(tuple(sorted((base1, base2))))
-
-
 
         return genotypes
