@@ -46,7 +46,9 @@ class Converter:
             else:
                 logger.info(f"Reading uncompressed manifest {self.manifest_filename}")
                 manifest_reader = CSVManifestReader(open(self.manifest_filename), genome_reader)
-            bpm_records = ManifestFilter(frozenset(), skip_snps=False).filtered_records(manifest_reader)
+            # apply the same blocklist to manifest records so locus allele sets
+            # aren’t inflated by blocked probes present only in the BPM
+            bpm_records = ManifestFilter(reader.blocklist, skip_snps=False).filtered_records(manifest_reader)
         else:
             bpm_records = {}
         vcfgenerator = VCFMaker(genome_reader, bpm_records)
