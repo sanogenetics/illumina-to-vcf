@@ -461,7 +461,31 @@ class VCFMaker:
                         probe = probes[k]
                         break
             if probe is None:
-                raise ConverterError(f"Probe name mismatch: no probe for {row.snp_name}")
+                # warn and fall back to row-derived probe definition
+                match = re.match(r"\[([ATCGID]+)\/([ATCGID]+)\]", row.snp)
+                if not match:
+                    msg = f"Unexpcted probes {row.chrom}:{row.pos} {row.snp}"
+                    raise ConverterError(msg)
+                new_alleles = match.group(1, 2)
+                if row.strand == "-":
+                    new_alleles = tuple(STRANDSWAP[allele] for allele in new_alleles)
+                logger.warning(
+                    "Probe name %s not found in manifest at %s:%s; falling back to row-derived alleles %s/%s",
+                    row.snp_name,
+                    row.chrom,
+                    row.pos,
+                    new_alleles[0],
+                    new_alleles[1],
+                )
+                probe = Probe(
+                    name=row.snp_name,
+                    assay_type=None,
+                    allele1=new_alleles[0],
+                    allele2=new_alleles[1],
+                )
+                probes[row.snp_name] = probe
+                for allele in new_alleles:
+                    alleles.add(allele)
 
             genotypes[sampleid] = self._combine_calls(previous_genotypes, new_calls, alleles, probe)
 
