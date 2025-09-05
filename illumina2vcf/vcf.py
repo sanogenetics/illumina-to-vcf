@@ -461,12 +461,6 @@ class VCFMaker:
             # robust probe lookup (short vs long names) ---
             probe = probes.get(row.snp_name)
             if probe is None:
-                # last-resort: match short name against long-name keys
-                for k in probes.keys():
-                    if k.startswith(row.snp_name + "-"):
-                        probe = probes[k]
-                        break
-            if probe is None:
                 # warn and fall back to row-derived probe definition
                 match = re.match(r"\[([ATCGID]+)\/([ATCGID]+)\]", row.snp)
                 if not match:
