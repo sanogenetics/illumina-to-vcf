@@ -126,7 +126,8 @@ class VCFMaker:
             for cand in ("M", "chrM", "MT", "chrMT"):
                 if cand in faidx:
                     return cand
-        raise ConverterError(f"Unexpected chromosome {chm}")
+        msg = f"Unexpected chromosome {chm}"
+        raise ConverterError(msg)
 
     def generate_header(self, date: str, source: str, buildname: str) -> Generator[VCFLine, None, None]:
         # write header
@@ -239,11 +240,15 @@ class VCFMaker:
             # get the records in the manifest for this locaion
             locus_records = self._bpm_records[(chm, pos)]
 
+        snp_names = tuple(sorted(frozenset(r.snp_name for r in block)))
+
         # if there are multiple probes that agree, thats fine
         # need to remove conflicting and duplicate rows
-        [calls, probed] = self._simplify_block(block, locus_records)
-
-        snp_names = tuple(sorted(frozenset(r.snp_name for r in block)))
+        try:
+            [calls, probed] = self._simplify_block(block, locus_records)
+        except Exception as err:
+            msg = f"{';'.join(snp_names)}: {err}"
+            raise RuntimeError(msg) from err
 
         converted_calls = {}
         # handel indels
@@ -514,7 +519,7 @@ class VCFMaker:
             return genotypes
         for base in result:
             if base not in alleles:
-                msg = f"base {base} no in allele list ({alleles})"
+                msg = f"base {base} not in allele list ({alleles})"
                 raise ValueError(msg)
 
         genotypes.add(tuple(sorted(result)))
