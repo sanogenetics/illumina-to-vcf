@@ -401,32 +401,53 @@ class TestVCF:
                     else:
                         genotype = ('-', '-')
                     assert (sample, genotype) == (sample, results[sample][0])
-    def test_filterstatus_for_all_samples_with_missing_genotypes(self, blocks, genome_reader, monkeypatch):
+    def test_filterstatus_for_single_sample_with_nocall(self, blocks, genome_reader, monkeypatch):
         """
-            GIVEN a block where no genotypes are produced
-            THEN FILTER should be FAIL
+            # SINGLE SAMPLE - with no genotype call - FILTER should be FAIL
+        
         """
         vcfgenerator = VCFMaker(genome_reader, {})
 
         # Force _simplify_block to return no calls
         def fake_simplify_block(block, locus_records):
-            return {block[0].sample_id: ("-", "-")}, {"T","C"}  # conflicting genotype calls returns as no calls, probed contains ref
+            return {block[0].sample_id: ("-", "-")}, {"T","C"}  
 
         monkeypatch.setattr(vcfgenerator, "_simplify_block", fake_simplify_block)
 
-        # Use first real block
-        block = blocks[0]
+
+        block = blocks[0][:1]  # force single sample
         sample_set = [row.sample_id for row in block]
 
         vcfline = vcfgenerator._line_block_to_vcf_line(block, sample_set)
-        print(vcfline)
+
+
         assert vcfline._filter== ("FAIL",)
         assert all(s["GT"] == "./." for s in vcfline.sample)
 
-    def test_filterstatus__for_some_samples_with_missinggenotypes(self, blocks, genome_reader, monkeypatch):
+    def test_filterstatus_for_single_sample_with_calledgenotype(self, blocks, genome_reader, monkeypatch):
         """
-            GIVEN a block where at least one genotype is produced
-            THEN FILTER should be PASS
+            SINGLE SAMPLE - with genotype call - FILTER should be PASS
+        """
+        vcfgenerator = VCFMaker(genome_reader, {})
+
+        # Return one called genotype
+        def fake_simplify_block(block, locus_records):
+            return {block[0].sample_id: ("C", "C")}, {"T","C"}
+
+        monkeypatch.setattr(vcfgenerator, "_simplify_block", fake_simplify_block)
+
+        block = blocks[0][:1]  # force single sample
+        sample_set = [row.sample_id for row in block]
+
+        vcfline = vcfgenerator._line_block_to_vcf_line(block, sample_set)
+        #print(vcfline)
+
+        assert vcfline._filter == ("PASS",)
+        assert any(s["GT"] != "./." for s in vcfline.sample)
+
+    def test_filterstatus_for_multisample_with_calledgenotype(self, blocks, genome_reader, monkeypatch):
+        """
+                MULTI SAMPLEs - at least one called genotype - FILTER should be PASS
         """
         vcfgenerator = VCFMaker(genome_reader, {})
 
@@ -440,8 +461,31 @@ class TestVCF:
         sample_set = [row.sample_id for row in block]
 
         vcfline = vcfgenerator._line_block_to_vcf_line(block, sample_set)
-        print(vcfline)
+        #print(vcfline)
+
         assert vcfline._filter == ("PASS",)
         assert any(s["GT"] != "./." for s in vcfline.sample)
 
-    
+    def test_filterstatus_for_multisample_with_nocalls(self, blocks, genome_reader, monkeypatch):
+        """
+            # MULTI SAMPLE - all samples with no call - FILTER should be FAIL
+        
+        """
+        vcfgenerator = VCFMaker(genome_reader, {})
+
+        # Force _simplify_block to return no calls
+        def fake_simplify_block(block, locus_records):
+            return {row.sample_id: ("-", "-") for row in block}, {"T", "C"}
+
+
+        monkeypatch.setattr(vcfgenerator, "_simplify_block", fake_simplify_block)
+
+
+        block = blocks[0]
+        sample_set = [row.sample_id for row in block]
+
+        vcfline = vcfgenerator._line_block_to_vcf_line(block, sample_set)
+
+
+        assert vcfline._filter== ("FAIL",)
+        assert all(s["GT"] == "./." for s in vcfline.sample)
