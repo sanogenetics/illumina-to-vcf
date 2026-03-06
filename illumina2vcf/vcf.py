@@ -137,6 +137,9 @@ class VCFMaker:
         # ##FILTER=<ID=PASS,Description="All filters passed">
         yield VCFLine.as_comment_key_dict("FILTER", {"ID": "PASS", "Description": '"All filters passed"'})
 
+        # ##FILTER=<ID=FAIL,Description="All samples missing genotype calls">
+        yield VCFLine.as_comment_key_dict("FILTER", {"ID": "FAIL", "Description": '"All samples missing genotype call"'})
+
         # ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
         yield VCFLine.as_comment_key_dict(
             "FORMAT",
@@ -321,8 +324,9 @@ class VCFMaker:
         # always need to have all samples on all rows
         # even if that samples has been filtered out e.g. conflicting probes
         samples = [{"GT": converted_calls.get(sampleid, "./.")} for sampleid in sample_set]
-
-        vcfline = VCFLine("", "", "", {}, chm, pos, snp_names, ref, alt, ".", ["PASS"], {}, samples)
+        all_samples_missing_genotypes = all(sample["GT"] == "./." for sample in samples)
+        filter_value = ["FAIL"] if all_samples_missing_genotypes else ["PASS"]
+        vcfline = VCFLine("", "", "", {}, chm, pos, snp_names, ref, alt, ".", filter_value, {}, samples)
 
         # update qc totals if single sample
         if len(samples) == 1:
