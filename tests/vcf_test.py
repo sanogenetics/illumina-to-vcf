@@ -450,18 +450,19 @@ class TestVCF:
                 MULTI SAMPLEs - at least one called genotype - FILTER should be PASS
         """
         vcfgenerator = VCFMaker(genome_reader, {})
-
+        
         # Return one called genotype
+        
         def fake_simplify_block(block, locus_records):
-            return {block[0].sample_id: ("C", "C")}, {"T","C"}
+            return {'sample1': ("C", "C"), 'sample2': ("-", "-")}, {"T", "C"}
+            
 
         monkeypatch.setattr(vcfgenerator, "_simplify_block", fake_simplify_block)
 
         block = blocks[0]
-        sample_set = [row.sample_id for row in block]
 
+        sample_set = [row.sample_id for row in block]
         vcfline = vcfgenerator._line_block_to_vcf_line(block, sample_set)
-        #print(vcfline)
 
         assert vcfline._filter == ("PASS",)
         assert any(s["GT"] != "./." for s in vcfline.sample)
