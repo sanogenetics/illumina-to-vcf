@@ -155,7 +155,7 @@ class TestVCF:
             assert line
             assert line[:2] == "##"
             field, data = line[2:].split("=", maxsplit=1)
-            if field in ("contig", "qc_stats"):
+            if field in ("contig", "qc_stats","FILTER"):
                 data_dict = {}
                 for stat in data[1:-1].split(","):
                     name, value = stat.split("=")
@@ -167,6 +167,11 @@ class TestVCF:
                         header_data[field] = [
                             data_dict,
                         ]
+                elif field == "FILTER":
+                    try:
+                        header_data[field].append(data)
+                    except KeyError:
+                        header_data[field] = [data]
                 else:
                     header_data[field] = data_dict
             else:
@@ -174,7 +179,9 @@ class TestVCF:
         assert header_data["fileformat"] == "VCFv4.3"
         assert "filedate" in header_data  # this is not getting properly formatted
         assert header_data["source"] == '"GSAMD-24v3-0-EA_20034606_A2, Sano Genetics"'
-        assert header_data["FILTER"] == '<ID=PASS,Description="All filters passed">'
+        #assert header_data["FILTER"] == '<ID=PASS,Description="All filters passed">'
+        assert '<ID=PASS,Description="All filters passed">' in header_data["FILTER"]
+        assert '<ID=FAIL,Description="All samples missing genotype call">' in header_data["FILTER"]
         assert header_data["FORMAT"] == "<ID=GT,Number=1,Type=String,Description=Genotype>"
         assert len(header_data["contig"]) == 5
         for chrom_info in header_data["contig"]:
@@ -394,3 +401,92 @@ class TestVCF:
                     else:
                         genotype = ('-', '-')
                     assert (sample, genotype) == (sample, results[sample][0])
+    def test_filterstatus_for_single_sample_with_nocall(self, blocks, genome_reader, monkeypatch):
+        """
+            # SINGLE SAMPLE - with no genotype call - FILTER should be FAIL
+        
+        """
+        vcfgenerator = VCFMaker(genome_reader, {})
+
+        # Force _simplify_block to return no calls
+        def fake_simplify_block(block, locus_records):
+            return {block[0].sample_id: ("-", "-")}, {"T","C"}  
+
+        monkeypatch.setattr(vcfgenerator, "_simplify_block", fake_simplify_block)
+
+
+        block = blocks[0][:1]  # force single sample
+        sample_set = [row.sample_id for row in block]
+
+        vcfline = vcfgenerator._line_block_to_vcf_line(block, sample_set)
+
+
+        assert vcfline._filter== ("FAIL",)
+        assert all(s["GT"] == "./." for s in vcfline.sample)
+
+    def test_filterstatus_for_single_sample_with_calledgenotype(self, blocks, genome_reader, monkeypatch):
+        """
+            SINGLE SAMPLE - with genotype call - FILTER should be PASS
+        """
+        vcfgenerator = VCFMaker(genome_reader, {})
+
+        # Return one called genotype
+        def fake_simplify_block(block, locus_records):
+            return {block[0].sample_id: ("C", "C")}, {"T","C"}
+
+        monkeypatch.setattr(vcfgenerator, "_simplify_block", fake_simplify_block)
+
+        block = blocks[0][:1]  # force single sample
+        sample_set = [row.sample_id for row in block]
+
+        vcfline = vcfgenerator._line_block_to_vcf_line(block, sample_set)
+        #print(vcfline)
+
+        assert vcfline._filter == ("PASS",)
+        assert any(s["GT"] != "./." for s in vcfline.sample)
+
+    def test_filterstatus_for_multisample_with_calledgenotype(self, blocks, genome_reader, monkeypatch):
+        """
+                MULTI SAMPLEs - at least one called genotype - FILTER should be PASS
+        """
+        vcfgenerator = VCFMaker(genome_reader, {})
+        
+        # Return one called genotype
+        
+        def fake_simplify_block(block, locus_records):
+            return {'sample1': ("C", "C"), 'sample2': ("-", "-")}, {"T", "C"}
+            
+
+        monkeypatch.setattr(vcfgenerator, "_simplify_block", fake_simplify_block)
+
+        block = blocks[0]
+
+        sample_set = [row.sample_id for row in block]
+        vcfline = vcfgenerator._line_block_to_vcf_line(block, sample_set)
+
+        assert vcfline._filter == ("PASS",)
+        assert any(s["GT"] != "./." for s in vcfline.sample)
+
+    def test_filterstatus_for_multisample_with_nocalls(self, blocks, genome_reader, monkeypatch):
+        """
+            # MULTI SAMPLE - all samples with no call - FILTER should be FAIL
+        
+        """
+        vcfgenerator = VCFMaker(genome_reader, {})
+
+        # Force _simplify_block to return no calls
+        def fake_simplify_block(block, locus_records):
+            return {row.sample_id: ("-", "-") for row in block}, {"T", "C"}
+
+
+        monkeypatch.setattr(vcfgenerator, "_simplify_block", fake_simplify_block)
+
+
+        block = blocks[0]
+        sample_set = [row.sample_id for row in block]
+
+        vcfline = vcfgenerator._line_block_to_vcf_line(block, sample_set)
+
+
+        assert vcfline._filter== ("FAIL",)
+        assert all(s["GT"] == "./." for s in vcfline.sample)
